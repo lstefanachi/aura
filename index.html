@@ -39,6 +39,7 @@ nav button.on{color:#fff;background:rgba(255,255,255,.12)}
 .top{display:flex;gap:8px;align-items:center;flex-shrink:0}
 button.outb{width:auto;padding:6px 14px;font-size:13px;background:rgba(0,0,0,.4)}
 button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff center/cover;color:#7b3fa0;font-weight:800;font-size:13px;border:2px solid #fff}
+.sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ac);margin:22px 0 6px}
 </style>
 </head>
 <body>
@@ -173,21 +174,30 @@ function home(app){
 }
 
 function atleta(app){
- var P=people().filter(function(x){return x.k===sel})[0]||{n:"",gare:0,pesi:0,rincorse:0};
+ var P=people().filter(function(x){return x.k===sel})[0]||{n:""};
  app.append(el("button",{class:"link",onclick:function(){go("home")}},"← Tutti gli atleti"));
- app.append(el("div",{class:"card"},[avEl(sel,P.n),el("h2",{style:"margin:0"},P.n),el("div",{class:"mu"},P.gare+" gare · "+P.pesi+" pesi · "+P.rincorse+" rincorse")]));
+ app.append(el("div",{class:"card",style:"display:flex;align-items:center;gap:12px"},[avEl(sel,P.n),el("h2",{style:"margin:0"},P.n)]));
  function mine(k){return S[k].filter(function(r){return keyOf(r)===sel}).sort(function(a,b){return b.ts-a.ts})}
+ function head(t){app.append(el("div",{class:"sec"},t))}
+ function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
+ function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
  var g=mine("gare"),p=mine("pesi"),r=mine("rincorse");
- if(p.length){var best={};p.forEach(function(x){var e=(x.es||"?").trim(),kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[e]||kg>best[e]))best[e]=kg});
-  app.append(el("h2",{},"🏋️ Record nei pesi"));var c=el("div",{class:"card"});
-  Object.keys(best).forEach(function(e){c.append(el("div",{class:"row"},[el("span",{},e),el("span",{class:"big"},best[e]+" kg")]))});app.append(c)}
- if(r.length){var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
-  app.append(el("h2",{},"📏 Rincorse attuali"));var c2=el("div",{class:"card"});
-  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},(x.mis?x.mis+" m":"")+(x.passi?" · "+x.passi+" passi":""))]))});app.append(c2)}
- [["gare",g],["pesi",p],["rincorse",r]].forEach(function(z){if(!z[1].length)return;
-  app.append(el("h2",{},F[z[0]].ic+" "+F[z[0]].t));
-  z[1].forEach(function(x){app.append(el("div",{class:"card"},[el("div",{},summary(z[0],x)),el("div",{class:"tag"},when(x.ts))]))})});
- if(!g.length&&!p.length&&!r.length)app.append(el("div",{class:"mu"},"Nessun dato."));
+ head("🏆 Gare");
+ if(g.length)items("gare",g);else none();
+ head("🏋️ Pesi");
+ if(p.length){
+  var best={};p.forEach(function(x){var e=(x.es||"?").trim(),kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[e]||kg>best[e]))best[e]=kg});
+  var c=el("div",{class:"card"},el("div",{class:"tag"},"Record"));
+  Object.keys(best).forEach(function(e){c.append(el("div",{class:"row"},[el("span",{},e),el("span",{class:"big"},best[e]+" kg")]))});
+  app.append(c);items("pesi",p);
+ }else none();
+ head("📏 Rincorse");
+ if(r.length){
+  var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
+  var c2=el("div",{class:"card"},el("div",{class:"tag"},"Attuali"));
+  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},(x.mis?x.mis+" m":"")+(x.passi?" · "+x.passi+" passi":""))]))});
+  app.append(c2);items("rincorse",r);
+ }else none();
  if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){app.append(el("button",{class:"del",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){});go("home")}}},"Rimuovi dall’elenco"))});
 }
 function section(app,k){
