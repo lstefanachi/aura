@@ -29,7 +29,7 @@ button{font:inherit;border:0;border-radius:12px;padding:14px;background:var(--ac
 button.link{background:none;color:var(--ac);width:auto;padding:4px 0;font-weight:600}
 button.del{background:none;color:var(--er);width:auto;padding:2px 0;font-weight:400;font-size:13px}
 label{display:block;font-size:13px;color:var(--mu);margin:10px 0 3px}
-input{font:inherit;width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+input,select{font:inherit;width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
 .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .big{font-weight:700}.tag{font-size:12px;color:var(--mu)}.pend{color:#b26a00}
 nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
@@ -50,18 +50,36 @@ button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff cen
 var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
 async function sha(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atl|"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
-function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM)}
+function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM||isCoach(n))}
 function fmt(s){return s.trim().replace(/\s+/g," ").split(" ").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()}).join(" ")}
-async function doLogin(nome,cogn,pw){
- if(!nome.trim()||!cogn.trim())return "Inserisci nome e cognome";
+var COACHES=["Chiara Genero","Marco Negro"],ATHLETES=["Luca Stefanachi"],PW_A="1234",PW_C="atlalba",LG={s:"",t:""};
+function isCoach(n){var x=fmt(n).toLowerCase();return COACHES.some(function(c){return c.toLowerCase()===x})}
+async function doLogin(nome,pw){
+ if(!nome.trim())return "Scegli il tuo nome";
+ var n=fmt(nome),known=people().some(function(x){return x.k==="id:"+n});
+ if(!known&&n.indexOf(" ")<0)return "Scrivi nome e cognome";
  var h=await sha(pw.trim());if(h!==H_ALL&&h!==H_ADM)return "Password non corretta";
- var n=fmt(nome+" "+cogn);setSes(n,h);
+ setSes(n,h);
  try{localStorage.setItem("atl_ses",JSON.stringify({n:n,h:h}))}catch(e){}
+ if(db&&!known)db.collection("persone").doc(uid()).set({nome:n,ts:Date.now(),by:n}).catch(function(){});
  return "";
 }
 function login(app){
- var a=el("input",{type:"text",autocomplete:"given-name"}),b=el("input",{type:"text",autocomplete:"family-name"}),c=el("input",{type:"password",autocomplete:"current-password"}),er=el("div",{class:"mu",style:"color:var(--er);margin-top:8px"});
- app.append(el("div",{class:"card"},[el("label",{},"Nome"),a,el("label",{},"Cognome"),b,el("label",{},"Password"),c,er,el("div",{style:"height:12px"}),el("button",{onclick:async function(){var m=await doLogin(a.value,b.value,c.value);if(m)er.textContent=m;else{view="home";render()}}},"Entra")]));
+ var sl=el("select",{}),tx=el("input",{type:"text",placeholder:"Nome e cognome",autocomplete:"name",style:"display:none;margin-top:8px"}),
+  ru=el("input",{type:"text",readonly:"readonly"}),pw=el("input",{type:"password",autocomplete:"current-password"}),
+  er=el("div",{class:"mu",style:"color:var(--er);margin-top:8px"});
+ sl.append(el("option",{value:""},"Scegli il tuo nome…"));
+ people().forEach(function(x){sl.append(el("option",{value:x.n},x.n))});
+ sl.value=LG.s;tx.value=LG.t;
+ function cur(){return sl.value==="__altro"?fmt(tx.value):sl.value}
+ function upd(){
+  LG.s=sl.value;LG.t=tx.value;tx.style.display=sl.value==="__altro"?"block":"none";
+  var n=cur();if(!n){ru.value="";pw.value="";return}
+  var c=isCoach(n);ru.value=c?"Allenatore":"Atleta";pw.value=c?PW_C:PW_A;
+ }
+ sl.onchange=upd;tx.oninput=upd;upd();
+ app.append(el("div",{class:"card"},[el("label",{},"Nome e cognome"),sl,tx,el("label",{},"Ruolo"),ru,el("label",{},"Password"),pw,er,el("div",{style:"height:12px"}),
+  el("button",{onclick:async function(){var m=await doLogin(cur(),pw.value);if(m)er.textContent=m;else{view="home";render()}}},"Entra")]));
 }
 var URL_="https://hsjkjchiuaajigdrayzj.supabase.co",KEY_="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzamtqY2hpdWFhamlnZHJheXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjI1OTEsImV4cCI6MjEwODAzODU5MX0.B19bjKOel8K0x0m65oultucFOEi78kd_BLVtVhrh7Dc";
 var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]},Q=[],subs={};
@@ -132,19 +150,28 @@ function people(){
   var key=keyOf(r);
   if(!m[key])m[key]={k:key,n:nm(r),gare:0,pesi:0,rincorse:0};m[key][k]++})});
  S.persone.forEach(function(r){var key="id:"+r.nome;if(!m[key])m[key]={k:key,n:r.nome,gare:0,pesi:0,rincorse:0}});
+ COACHES.forEach(function(c){var key="id:"+c;if(!m[key])m[key]={k:key,n:c,gare:0,pesi:0,rincorse:0};m[key].coach=true});
+ ATHLETES.forEach(function(c){var key="id:"+c;if(!m[key])m[key]={k:key,n:c,gare:0,pesi:0,rincorse:0}});
  return Object.keys(m).map(function(k){return m[k]}).sort(function(a,b){return a.n.localeCompare(b.n)});
 }
 function home(app){
- var p=people();
- app.append(el("h2",{},"Tutti gli atleti ("+p.length+")"));
- if(admin)app.append(el("button",{onclick:addPerson,style:"margin-bottom:12px"},"＋ Aggiungi persona"));
- if(!p.length){app.append(el("div",{class:"mu"},"Nessun atleta ancora: inserisci il primo dato da Gare, Pesi o Rincorse."));return}
+ var p=people(),co=p.filter(function(x){return x.coach}),at=p.filter(function(x){return !x.coach});
+ if(co.length){
+  app.append(el("h2",{},"Allenatori"));
+  var gc=el("div",{class:"grid"});
+  co.forEach(function(x){gc.append(el("div",{class:"ath"},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt"},"Allenatore")]))});
+  app.append(gc);
+ }
+ app.append(el("h2",{},"Tutti gli atleti ("+at.length+")"));
+ app.append(el("button",{onclick:addPerson,style:"margin-bottom:12px"},"＋ Aggiungi persona"));
+ if(!at.length){app.append(el("div",{class:"mu"},"Nessun atleta ancora: inserisci il primo dato da Gare, Pesi o Rincorse."));return}
  var g=el("div",{class:"grid"});
- p.forEach(function(x){
-  g.append(el("button",{class:"ath",onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt"},x.gare+" gare · "+x.pesi+" pesi · "+x.rincorse+" rincorse"),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]));
+ at.forEach(function(x){
+  g.append(el("button",{class:"ath",onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]));
  });
- app.append(g,el("div",{style:"height:14px"}),el("button",{class:"link",onclick:function(){try{localStorage.removeItem("atl_ses")}catch(e){}ses=null;admin=false;view="home";render()}},"Esci"));
+ app.append(g);
 }
+
 function atleta(app){
  var P=people().filter(function(x){return x.k===sel})[0]||{n:"",gare:0,pesi:0,rincorse:0};
  app.append(el("button",{class:"link",onclick:function(){go("home")}},"← Tutti gli atleti"));
@@ -203,7 +230,7 @@ function account(app){
  var big=el("div",{class:"av",style:"width:96px;height:96px;font-size:32px;margin:12px auto"});paint(big,"id:"+ses.n,ses.n);
  var f=el("input",{type:"file",accept:"image/*",style:"display:none"});
  f.onchange=function(){if(f.files[0])setPhoto(f.files[0])};
- app.append(el("div",{class:"card",style:"text-align:center"},[big,el("div",{class:"big"},ses.n),el("div",{class:"mu"},admin?"Admin":"Atleta"),el("div",{style:"height:14px"}),
+ app.append(el("div",{class:"card",style:"text-align:center"},[big,el("div",{class:"big"},ses.n),el("div",{class:"mu"},isCoach(ses.n)?"Allenatore":(admin?"Admin":"Atleta")),el("div",{style:"height:14px"}),
   el("button",{onclick:function(){f.click()}},"Cambia foto profilo"),f,el("div",{style:"height:6px"}),
   el("button",{class:"link",onclick:function(){db.collection("profili").doc("prof:"+ses.n.toLowerCase()).delete().catch(function(){})}},"Rimuovi foto")]));
 }
@@ -240,7 +267,7 @@ async function init(){
  ["gare","pesi","rincorse"].concat(["log","persone","profili"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
-   loadNames().then(function(){if(!document.activeElement||document.activeElement.tagName!=="INPUT")render()});
+   loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(t!=="INPUT"&&t!=="SELECT")render()});
   },function(){});
  });
  render();
