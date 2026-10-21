@@ -119,7 +119,7 @@ function logout(){try{localStorage.removeItem("atl_ses")}catch(e){}ses=null;admi
 var F={
  gare:{t:"Gare",ic:"🏆",f:[["data","Data","date"],["gara","Gara / disciplina","select",{"Velocità":["50 m","60 m","100 m","150 m","200 m","300 m","400 m"],"Ostacoli":["60 m ostacoli","100 m ostacoli","110 m ostacoli","300 m ostacoli","400 m ostacoli"],"Mezzofondo":["600 m","800 m","1000 m","1500 m"],"Staffette":["4x100 m","4x400 m"],"Salti":["Salto in lungo","Salto triplo","Salto in alto","Salto con l’asta"],"Lanci":["Getto del peso","Lancio del disco","Lancio del giavellotto","Lancio del martello","Lancio del vortex"],"Prove multiple":["Pentathlon","Esathlon","Eptathlon","Decathlon"]}],["kg","Peso attrezzo (kg)","number",null,["Getto del peso","Lancio del disco","Lancio del martello"]],["gr","Peso attrezzo (grammi)","number",null,["Lancio del giavellotto","Lancio del vortex"]],["ris","Risultato","text"],["note","Note","text"]]},
  pesi:{t:"Pesi",ic:"🏋️",f:[["data","Data","date"],["es","Esercizio","text"],["kg","Kg","number"],["serie","Serie × ripetizioni","text"]]},
- rincorse:{t:"Rincorse",ic:"📏",h:1,f:[["disc","Disciplina","select",{"Salti":["Lungo","Triplo","Alto","Asta"],"Lanci":["Giavellotto"]}],["passi","Numero passi","number"],["passi2","Passi in curva","number",null,"Alto"],["note","Note","text"]]}
+ rincorse:{t:"Rincorse",ic:"📏",h:1,f:[["disc","Disciplina","select",{"Salti":["Lungo","Triplo","Alto","Asta"],"Lanci":["Giavellotto"]}],["passi","Numero passi","number",null,null,"p"],["passi2","Numero passi 2","number",null,"Alto","p"],["note","Note","text"]]}
 };
 function el(t,a,c){var e=document.createElement(t);for(var k in (a||{})){if(k==="onclick")e.onclick=a[k];else e.setAttribute(k,a[k])}
  [].concat(c||[]).forEach(function(x){e.append(x)});return e}
@@ -127,7 +127,7 @@ function who(id){return id||"Qualcuno"}
 function nm(r){return (r.atleta||"").trim()||who(r.by)}
 function keyOf(r){var a=(r.atleta||"").trim();return a?a.toLowerCase():"id:"+r.by}
 function when(ts){return new Date(ts).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
-function summary(k,v){return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?x+" passi":f[0]==="passi2"?x+" passi in curva":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
+function summary(k,v){return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Passi 1: "+x:x+" passi"):f[0]==="passi2"?"Passi 2: "+x:f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
 function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0)}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
@@ -195,30 +195,33 @@ function atleta(app){
  if(r.length){
   var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
   var c2=el("div",{class:"card"},el("div",{class:"tag"},"Attuali"));
-  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},[x.mis?x.mis+" m":"",x.passi?x.passi+" passi":"",x.passi2?x.passi2+" in curva":""].filter(Boolean).join(" · "))]))});
+  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},[x.mis?x.mis+" m":"",x.passi?(x.passi2?x.passi+" / "+x.passi2:x.passi)+" passi":""].filter(Boolean).join(" · "))]))});
   app.append(c2);items("rincorse",r);
  }else none();
  if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){app.append(el("button",{class:"del",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){});go("home")}}},"Rimuovi dall’elenco"))});
 }
 function section(app,k){
- var form=el("div",{class:"card"}),inp={},cond=[];
- F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var w=el("div",{},[el("label",{},f[1]),i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}form.append(w)});
- var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""})};
+ var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={};
+ F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]);lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
+  var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
+  tg.append(w)});
+ var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero passi 1":"Numero passi"};
  form.append(el("div",{style:"height:12px"}),el("button",{onclick:function(){add(k,inp)}},"Salva"));
  app.append(form,el("h2",{},"Dati inseriti"));
  var rows=S[k].slice().sort(function(a,b){return b.ts-a.ts});
  if(!rows.length)app.append(el("div",{class:"mu"},"Nessun dato inserito."));
  rows.forEach(function(r){
   var head=[nm(r)].concat(F[k].f.slice(0,F[k].h||2).map(function(f){return r[f[0]]})).filter(Boolean).join(" · ");
-  var rest=F[k].f.slice(F[k].h||2).map(function(f){return r[f[0]]?f[1]+": "+r[f[0]]:""}).filter(Boolean).join(" — ");
+  var rest=F[k].f.slice(F[k].h||2).map(function(f){return r[f[0]]?(f[0]==="passi"&&r.passi2?"Numero passi 1":f[1])+": "+r[f[0]]:""}).filter(Boolean).join(" — ");
   app.append(el("div",{class:"card"},[el("div",{class:"big"},head),el("div",{},rest),
    el("div",{class:"row"},[el("span",{class:"tag"+(r._p?" pend":"")},r._p?"In attesa di rete":when(r.ts)),el("button",{class:"del",onclick:function(){rem(k,r)}},"Elimina")])]));
  });
 }
 function storico(app){
  var l=S.log.slice().sort(function(a,b){return b.ts-a.ts}).slice(0,100);
- if(!l.length)app.append(el("div",{class:"mu"},"Ancora nessuna modifica."));
- l.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{class:"row"},[el("span",{class:"big"},who(x.by)+" ha "+x.act),el("span",{class:"tag"},when(x.ts))]),el("div",{class:"mu"},(F[x.sec]?F[x.sec].t+": ":"Persona: ")+x.txt)]))});
+ if(!l.length){app.append(el("div",{class:"mu"},"Ancora nessuna modifica."));return}
+ app.append(el("button",{class:"del",style:"font-size:14px;margin-bottom:4px",onclick:function(){if(confirm("Cancellare tutta la cronologia dello storico? Non si può annullare."))S.log.slice().forEach(function(x){db.collection("log").doc(x.id).delete().catch(function(){})})}},"Cancella tutta la cronologia"));
+ l.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{class:"row"},[el("span",{class:"big"},who(x.by)+" ha "+x.act),el("span",{class:"tag"},when(x.ts))]),el("div",{class:"mu"},(F[x.sec]?F[x.sec].t+": ":"Persona: ")+x.txt),el("button",{class:"del",onclick:function(){db.collection("log").doc(x.id).delete().catch(function(){})}},"Elimina")]))});
 }
 function ini(n){var p=n.split(" ");return (p[0].charAt(0)+(p.length>1?p[p.length-1].charAt(0):"")).toUpperCase()}
 function photo(k){var x=S.profili.filter(function(r){return r.k===k})[0];return x?x.img:null}
