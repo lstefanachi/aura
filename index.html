@@ -40,6 +40,8 @@ nav button.on{color:#fff;background:rgba(255,255,255,.12)}
 button.outb{width:auto;padding:6px 14px;font-size:13px;background:rgba(0,0,0,.4)}
 button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff center/cover;color:#7b3fa0;font-weight:800;font-size:13px;border:2px solid #fff}
 .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ac);margin:22px 0 6px}
+.toast{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom,0px));max-width:80vw;background:#2e7d4f;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.3);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:30}
+.toast.on{opacity:1;transform:none}
 </style>
 </head>
 <body>
@@ -93,10 +95,12 @@ function notify(c){
  subs[c]({docs:Object.keys(m).map(function(i){var x=m[i];return{id:x.id,data:function(){return x.v},metadata:{hasPendingWrites:x.p}}})});
 }
 async function pull(){
- var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");if(!full)q=q.neq("coll","profili");var r=await q;if(r.error)return;
+ var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=!(admin&&view==="storico");if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");var r=await q;if(r.error)return;
  var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
+ if(nl)n.log=cache.log;
+ if(!nl&&!logOk){logOk=true;cache=n;Object.keys(subs).forEach(notify);return}
  if(JSON.stringify(n)===JSON.stringify(cache))return;
  cache=n;Object.keys(subs).forEach(notify);
 }
@@ -108,7 +112,7 @@ async function flush(){
  }
 }
 var busy=false;
-var tick=0;
+var tick=0,logOk=false;
 async function sync(){if(busy||!SB)return;busy=true;try{var had=Q.length;await flush();if(had&&!Q.length)tick=0;await pull();tick++}catch(e){}busy=false}
 function mkdb(){return{collection:function(c){return{
  doc:function(id){return{
@@ -128,7 +132,7 @@ function nm(r){return (r.atleta||"").trim()||who(r.by)}
 function keyOf(r){var a=(r.atleta||"").trim();return a?a.toLowerCase():"id:"+r.by}
 function when(ts){return new Date(ts).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
 function summary(k,v){return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Passi 1: "+x:x+" passi"):f[0]==="passi2"?"Passi 2: "+x:f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
-function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0)}
+function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0);if(v==="storico")sync()}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
  var items=[["home","🏃","Atleti"],["gare","🏆","Gare"],["pesi","🏋️","Pesi"],["rincorse","📏","Rincorse"]];
@@ -198,7 +202,7 @@ function atleta(app){
   Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},[x.mis?x.mis+" m":"",x.passi?(x.passi2?x.passi+" / "+x.passi2:x.passi)+" passi":""].filter(Boolean).join(" · "))]))});
   app.append(c2);items("rincorse",r);
  }else none();
- if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){app.append(el("button",{class:"del",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){});go("home")}}},"Rimuovi dall’elenco"))});
+ if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){app.append(el("button",{class:"del",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){}),gone();go("home")}}},"Rimuovi dall’elenco"))});
 }
 function section(app,k){
  var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={};
@@ -218,10 +222,11 @@ function section(app,k){
  });
 }
 function storico(app){
+ if(!logOk){app.append(el("div",{class:"mu"},"Caricamento…"));return}
  var l=S.log.slice().sort(function(a,b){return b.ts-a.ts}).slice(0,100);
  if(!l.length){app.append(el("div",{class:"mu"},"Ancora nessuna modifica."));return}
- app.append(el("button",{class:"del",style:"font-size:14px;margin-bottom:4px",onclick:function(){if(confirm("Cancellare tutta la cronologia dello storico? Non si può annullare."))S.log.slice().forEach(function(x){db.collection("log").doc(x.id).delete().catch(function(){})})}},"Cancella tutta la cronologia"));
- l.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{class:"row"},[el("span",{class:"big"},who(x.by)+" ha "+x.act),el("span",{class:"tag"},when(x.ts))]),el("div",{class:"mu"},(F[x.sec]?F[x.sec].t+": ":"Persona: ")+x.txt),el("button",{class:"del",onclick:function(){db.collection("log").doc(x.id).delete().catch(function(){})}},"Elimina")]))});
+ app.append(el("button",{class:"del",style:"font-size:14px;margin-bottom:4px",onclick:function(){if(confirm("Cancellare tutta la cronologia dello storico? Non si può annullare.")){S.log.slice().forEach(function(x){db.collection("log").doc(x.id).delete().catch(function(){/*x*/})});gone()}}},"Cancella tutta la cronologia"));
+ l.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{class:"row"},[el("span",{class:"big"},who(x.by)+" ha "+x.act),el("span",{class:"tag"},when(x.ts))]),el("div",{class:"mu"},(F[x.sec]?F[x.sec].t+": ":"Persona: ")+x.txt),el("button",{class:"del",onclick:function(){db.collection("log").doc(x.id).delete().catch(function(){}),gone()}},"Elimina")]))});
 }
 function ini(n){var p=n.split(" ");return (p[0].charAt(0)+(p.length>1?p[p.length-1].charAt(0):"")).toUpperCase()}
 function photo(k){var x=S.profili.filter(function(r){return r.k===k})[0];return x?x.img:null}
@@ -255,6 +260,9 @@ function addPerson(){
  db.collection("persone").doc(uid()).set({nome:n,ts:Date.now(),by:me}).catch(function(){});
  logit("aggiunto","persone",n);
 }
+var tmr=null;
+function toast(m){var t=document.getElementById("toast");if(!t){t=el("div",{id:"toast",class:"toast"});document.body.append(t)}t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2800)}
+function gone(){toast(navigator.onLine?"Eliminazione completata ✓":"Eliminato: si sincronizza quando torna la rete")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function logit(act,k,txt){db.collection("log").doc(uid()).set({by:me,ts:Date.now(),act:act,sec:k,txt:txt}).catch(function(){})}
 function add(k,inp){
@@ -268,7 +276,7 @@ function add(k,inp){
 }
 function rem(k,r){
  if(!confirm("Eliminare questa riga?"))return;
- db.collection(k).doc(r.id).delete().catch(function(){});
+ db.collection(k).doc(r.id).delete().catch(function(){}),gone();
  logit("eliminato",k,summary(k,r));
 }
 async function loadNames(){
