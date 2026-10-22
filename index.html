@@ -43,6 +43,7 @@ button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff cen
 .toast{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom,0px));max-width:80vw;background:#2e7d4f;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.3);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:30}
 .toast.on{opacity:1;transform:none}
 textarea{resize:vertical;min-height:150px}
+.note{background:var(--ac2);color:var(--tx);border-radius:12px;padding:10px 12px;font-size:14px;margin:10px 0}
 </style>
 </head>
 <body>
@@ -142,7 +143,7 @@ function rincLines(r){
  return L.filter(Boolean).join("\n");
 }
 function summary(k,v){if(k==="rincorse")return rincLines(v);return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
-function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0)}
+function go(v,s){view=v;sel=s||null;EDIT=null;render();window.scrollTo(0,0)}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
  var items=[["home","🏃","Atleti"],["gare","🏆","Gare"],["pesi","🏋️","Pesi"],["rincorse","📏","Rincorse"]];
@@ -220,8 +221,19 @@ function section(app,k){
  F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]);lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
   var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
   tg.append(w)});
- var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi"};
- form.append(el("div",{style:"height:12px"}),el("button",{onclick:function(){add(k,inp)}},"Salva"));
+ var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi";if(inp.ris&&inp.gara)inp.ris.placeholder=hint(inp.gara.value)||"Il tuo risultato migliore"};
+ if(inp.ris&&inp.gara)inp.ris.placeholder="Il tuo risultato migliore";
+ var er=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
+ if(EDIT&&!er)EDIT=null;
+ form.append(el("div",{style:"height:12px"}),el("button",{onclick:function(){add(k,inp)}},er?"Salva modifiche":"Salva"));
+ if(er){
+  form.append(el("button",{class:"link",style:"margin-top:8px",onclick:function(){EDIT=null;render()}},"Annulla modifica"));
+  form.insertBefore(el("div",{class:"tag"},"Modifica in corso"),form.firstChild);
+  F[k].f.forEach(function(f){if(er[f[0]]!==undefined&&inp[f[0]])inp[f[0]].value=er[f[0]]});
+  if(inp._a)inp._a.value=er.for||er.by||"";
+  var c0=inp.disc||inp.gara;if(c0&&c0.onchange)c0.onchange();
+ }
+ if(k==="gare")app.append(el("div",{class:"note"},"ℹ️ Inserisci solo il tuo risultato migliore per ogni specialità. Se la specialità è già presente, resta solo il risultato migliore."));
  app.append(form,el("h2",{},"Dati inseriti"));
  var rows=S[k].slice().sort(function(a,b){return b.ts-a.ts});
  if(!rows.length)app.append(el("div",{class:"mu"},"Nessun dato inserito."));
@@ -237,7 +249,7 @@ function section(app,k){
    });
   }else restEl=el("div",{},rest);
   app.append(el("div",{class:"card"},[el("div",{class:"big"},head),restEl,
-   el("div",{class:"row"},[el("span",{class:"tag"+(r._p?" pend":"")},r._p?"In attesa di rete":when(r.ts)),el("button",{class:"del",onclick:function(){rem(k,r)}},"Elimina")])]));
+   el("div",{class:"row"},[el("span",{class:"tag"+(r._p?" pend":"")},r._p?"In attesa di rete":when(r.ts)),el("span",{},[(admin||keyOf(r)==="id:"+me)?el("button",{class:"del",style:"margin-right:14px;color:var(--ac)",onclick:function(){EDIT={k:k,id:r.id};render();window.scrollTo(0,0)}},"Modifica"):"",el("button",{class:"del",onclick:function(){rem(k,r)}},"Elimina")])])]));
  });
 }
 function allenamenti(app){
@@ -281,17 +293,60 @@ function addPerson(){
  db.collection("persone").doc(uid()).set({nome:n,ts:Date.now(),by:me}).catch(function(){});
  logit("aggiunto","persone",n);
 }
-var tmr=null,ATH="",DRAFT=null;
+var tmr=null,ATH="",DRAFT=null,EDIT=null;
 function toast(m){var t=document.getElementById("toast");if(!t){t=el("div",{id:"toast",class:"toast"});document.body.append(t)}t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2800)}
 function gone(){toast(navigator.onLine?"Eliminazione completata ✓":"Eliminato: si sincronizza quando torna la rete")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function logit(){}
+function num(s){
+ s=String(s||"").trim().toLowerCase().replace(",",".").replace(/'/g,":").replace(/"/g,".").replace(/[^0-9:.]/g,"");
+ if(!s)return NaN;var v=0;s.split(":").forEach(function(x){v=v*60+(parseFloat(x)||0)});return v;
+}
+function lowWins(g){
+ var o=F.gare.f.filter(function(f){return f[0]==="gara"})[0][3],res=null;
+ Object.keys(o).forEach(function(gr){if(o[gr].indexOf(g)>=0)res=["Velocità","Ostacoli","Mezzofondo","Staffette"].indexOf(gr)>=0});
+ return res;
+}
+function hint(g){
+ var o=F.gare.f.filter(function(f){return f[0]==="gara"})[0][3],r="";
+ Object.keys(o).forEach(function(gr){if(o[gr].indexOf(g)>=0)r=["Velocità","Ostacoli","Mezzofondo","Staffette"].indexOf(gr)>=0?"Il tempo migliore, es. 12.40 o 1:58.30":gr==="Prove multiple"?"Il punteggio più alto, es. 3200":"La misura migliore in metri, es. 5.42"});
+ return r;
+}
 function add(k,inp){
  var v={},any=false;F[k].f.forEach(function(f){v[f[0]]=inp[f[0]].value.trim();if(v[f[0]]&&f[0]!=="data")any=true});
  if(!any)return;
  if(admin){var an=inp._a?inp._a.value:"";if(!an){alert("Scegli prima l’atleta");return}v.for=an}
+ var old=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
+ if(old){
+  v.by=old.by;v.ts=old.ts;if(old.for&&!admin)v.for=old.for;
+  db.collection(k).doc(old.id).set(v).catch(function(){});
+  EDIT=null;toast("Modifica salvata ✓");render();return;
+ }
  v.by=me;v.ts=Date.now();
- db.collection(k).doc(uid()).set(v).catch(function(){});
+ var id=uid(),msg="";
+ if(k==="gare"&&v.gara){
+  var low=lowWins(v.gara);
+  if(low!==null){
+   var key="id:"+(v.for||me),ex=S.gare.filter(function(r){return keyOf(r)===key&&r.gara===v.gara})[0];
+   if(ex){
+    var a=num(v.ris),b=num(ex.ris),better=isNaN(a)?isNaN(b):(isNaN(b)||(low?a<b:a>b));
+    if(!better){alert("Non salvato: per "+v.gara+" c’è già un risultato migliore o uguale ("+(ex.ris||"senza risultato")+").");return}
+    id=ex.id;msg="Nuovo record: risultato sostituito ✓";
+   }
+  }
+ }
+
+ var uk=k==="pesi"?"es":k==="rincorse"?"disc":"";
+ if(uk&&v[uk]){
+  var key2="id:"+(v.for||me),same=S[k].filter(function(r){return keyOf(r)===key2&&String(r[uk]||"").trim().toLowerCase()===v[uk].toLowerCase()}).sort(function(a,b){return b.ts-a.ts});
+  if(same.length){id=same[0].id;same.slice(1).forEach(function(r){db.collection(k).doc(r.id).delete().catch(function(){})})}
+ }
+ if(k==="rincorse"&&v.disc){
+  var k2="id:"+(v.for||me),ex2=S.rincorse.filter(function(r){return keyOf(r)===k2&&r.disc===v.disc})[0];
+  if(ex2){id=ex2.id;msg="Rincorsa sostituita ✓"}
+ }
+ db.collection(k).doc(id).set(v).catch(function(){});
+ if(msg)toast(msg);
  logit("aggiunto",k,summary(k,v));
  F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});
  var ctl=inp.disc||inp.gara;if(ctl&&ctl.onchange)ctl.onchange();
@@ -312,7 +367,7 @@ async function init(){
  ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
-   loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
+   loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(!EDIT&&t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
   },function(){});
  });
  render();
