@@ -29,7 +29,7 @@ button{font:inherit;border:0;border-radius:12px;padding:14px;background:var(--ac
 button.link{background:none;color:var(--ac);width:auto;padding:4px 0;font-weight:600}
 button.del{background:none;color:var(--er);width:auto;padding:2px 0;font-weight:400;font-size:13px}
 label{display:block;font-size:13px;color:var(--mu);margin:10px 0 3px}
-input,select{font:inherit;width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+input,select,textarea{font:inherit;width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
 .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
 .big{font-weight:700}.tag{font-size:12px;color:var(--mu)}.pend{color:#b26a00}
 nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));z-index:20}
@@ -42,6 +42,7 @@ button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff cen
 .sec{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ac);margin:22px 0 6px}
 .toast{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom,0px));max-width:80vw;background:#2e7d4f;color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.3);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none;z-index:30}
 .toast.on{opacity:1;transform:none}
+textarea{resize:vertical;min-height:150px}
 </style>
 </head>
 <body>
@@ -50,7 +51,7 @@ button.me{width:36px;height:36px;padding:0;border-radius:50%;background:#fff cen
 <nav id="nav"></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
-var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
+var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
 async function sha(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atl|"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
 function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM||isCoach(n))}
@@ -85,7 +86,7 @@ function login(app){
   el("button",{onclick:async function(){var m=await doLogin(cur(),pw.value);if(m)er.textContent=m;else{view="home";render()}}},"Entra")]));
 }
 var URL_="https://hsjkjchiuaajigdrayzj.supabase.co",KEY_="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzamtqY2hpdWFhamlnZHJheXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjI1OTEsImV4cCI6MjEwODAzODU5MX0.B19bjKOel8K0x0m65oultucFOEi78kd_BLVtVhrh7Dc";
-var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]},Q=[],subs={};
+var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[]},Q=[],subs={};
 try{Q=JSON.parse(localStorage.getItem("atl_q")||"[]")}catch(e){}
 function saveQ(){try{localStorage.setItem("atl_q",JSON.stringify(Q))}catch(e){}}
 function notify(c){
@@ -95,8 +96,8 @@ function notify(c){
  subs[c]({docs:Object.keys(m).map(function(i){var x=m[i];return{id:x.id,data:function(){return x.v},metadata:{hasPendingWrites:x.p}}})});
 }
 async function pull(){
- var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=!(admin&&view==="storico");if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");var r=await q;if(r.error)return;
- var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[]};
+ var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");var r=await q;if(r.error)return;
+ var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
  if(nl)n.log=cache.log;
@@ -128,26 +129,35 @@ var F={
 function el(t,a,c){var e=document.createElement(t);for(var k in (a||{})){if(k==="onclick")e.onclick=a[k];else e.setAttribute(k,a[k])}
  [].concat(c||[]).forEach(function(x){e.append(x)});return e}
 function who(id){return id||"Qualcuno"}
-function nm(r){return (r.atleta||"").trim()||who(r.by)}
-function keyOf(r){var a=(r.atleta||"").trim();return a?a.toLowerCase():"id:"+r.by}
+function nm(r){return (r.atleta||"").trim()||r.for||who(r.by)}
+function keyOf(r){var a=(r.atleta||"").trim();return a?a.toLowerCase():"id:"+(r.for||r.by)}
 function when(ts){return new Date(ts).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}
-function summary(k,v){return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
-function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0);if(v==="storico")sync()}
+function rincLines(r){
+ var L=[r.disc||""];
+ if(r.mis)L.push("Distanza rincorsa: "+r.mis+" m");
+ var a=[];if(r.passi)a.push((r.passi2?"Numero piedi 1":"Numero piedi")+": "+r.passi);if(r.passi2)a.push("Numero piedi 2: "+r.passi2);
+ if(a.length)L.push(a.join(" — "));
+ if(r.np)L.push("Numero passi: "+r.np);
+ if(r.note)L.push("Note: "+r.note);
+ return L.filter(Boolean).join("\n");
+}
+function summary(k,v){if(k==="rincorse")return rincLines(v);return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
+function go(v,s){view=v;sel=s||null;render();window.scrollTo(0,0)}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
  var items=[["home","🏃","Atleti"],["gare","🏆","Gare"],["pesi","🏋️","Pesi"],["rincorse","📏","Rincorse"]];
- if(admin)items.push(["storico","🕓","Storico"]);
+ items.push(["allenamenti","📋","Allenamenti"]);
  items.forEach(function(i){n.append(el("button",{class:(view===i[0]||(view==="atleta"&&i[0]==="home"))?"on":"",onclick:function(){go(i[0])}},[el("span",{},i[1]),i[2]]))});
 }
 function render(){
  var app=document.getElementById("app");app.replaceChildren();navbar();
- var t={home:"Atletica Alba",account:"Il mio profilo",atleta:"Atletica Alba",storico:"Storico",gare:F.gare.t,pesi:F.pesi.t,rincorse:F.rincorse.t};
+ var t={home:"Atletica Alba",account:"Il mio profilo",atleta:"Atletica Alba",allenamenti:"Allenamenti",gare:F.gare.t,pesi:F.pesi.t,rincorse:F.rincorse.t};
  document.getElementById("ttl").textContent=t[view]||"Atletica Alba";
  document.getElementById("sub").textContent="Avrai aura?";
  document.getElementById("top").style.display=ses?"flex":"none";if(ses)paintMe();
  if(!db){app.append(el("div",{class:"card"},"App non configurata: mancano indirizzo e chiave del database."));return}
  if(!ses){login(app);return}
- if(view==="home")home(app);else if(view==="account")account(app);else if(view==="atleta")atleta(app);else if(view==="storico")storico(app);else section(app,view);
+ if(view==="home")home(app);else if(view==="account")account(app);else if(view==="atleta")atleta(app);else if(view==="allenamenti")allenamenti(app);else section(app,view);
 }
 function people(){
  var m={};
@@ -184,7 +194,7 @@ function atleta(app){
  function mine(k){return S[k].filter(function(r){return keyOf(r)===sel}).sort(function(a,b){return b.ts-a.ts})}
  function head(t){app.append(el("div",{class:"sec"},t))}
  function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
- function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
+ function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{style:"white-space:pre-line"},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
  var g=mine("gare"),p=mine("pesi"),r=mine("rincorse");
  head("🏆 Gare");
  if(g.length)items("gare",g);else none();
@@ -199,13 +209,14 @@ function atleta(app){
  if(r.length){
   var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
   var c2=el("div",{class:"card"},el("div",{class:"tag"},"Attuali"));
-  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("span",{class:"big"},[x.mis?x.mis+" m":"",x.passi?(x.passi2?x.passi+" / "+x.passi2:x.passi)+" piedi":"",x.np?x.np+" passi":""].filter(Boolean).join(" · "))]))});
+  Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("div",{class:"big",style:"text-align:right"},rincLines(x).split("\n").slice(1).filter(function(t){return t.indexOf("Note:")!==0}).map(function(t){return el("div",{},t)}))]))});
   app.append(c2);items("rincorse",r);
  }else none();
  if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){topc.append(el("button",{class:"del",style:"margin-left:auto;text-align:right",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){}),gone();go("home")}}},"Rimuovi dall’elenco"))});
 }
 function section(app,k){
  var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={};
+ if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value};inp._a=sa;form.append(el("label",{},"Atleta"),sa)}
  F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]);lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
   var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
   tg.append(w)});
@@ -217,16 +228,26 @@ function section(app,k){
  rows.forEach(function(r){
   var head=[nm(r)].concat(F[k].f.slice(0,F[k].h||2).map(function(f){return r[f[0]]})).filter(Boolean).join(" · ");
   var rest=F[k].f.slice(F[k].h||2).map(function(f){return r[f[0]]?(f[0]==="passi"&&r.passi2?"Numero piedi 1":f[1])+": "+r[f[0]]:""}).filter(Boolean).join(" — ");
-  app.append(el("div",{class:"card"},[el("div",{class:"big"},head),el("div",{},rest),
+  var restEl;
+  if(k==="rincorse"){
+   restEl=el("div",{});
+   [["passi","passi2"],["np"],["note"]].forEach(function(g){
+    var t=F[k].f.filter(function(f){return g.indexOf(f[0])>=0&&r[f[0]]}).map(function(f){return (f[0]==="passi"&&r.passi2?"Numero piedi 1":f[1])+": "+r[f[0]]}).join(" — ");
+    if(t)restEl.append(el("div",{},t));
+   });
+  }else restEl=el("div",{},rest);
+  app.append(el("div",{class:"card"},[el("div",{class:"big"},head),restEl,
    el("div",{class:"row"},[el("span",{class:"tag"+(r._p?" pend":"")},r._p?"In attesa di rete":when(r.ts)),el("button",{class:"del",onclick:function(){rem(k,r)}},"Elimina")])]));
  });
 }
-function storico(app){
- if(!logOk){app.append(el("div",{class:"mu"},"Caricamento…"));return}
- var l=S.log.slice().sort(function(a,b){return b.ts-a.ts}).slice(0,100);
- if(!l.length){app.append(el("div",{class:"mu"},"Ancora nessuna modifica."));return}
- app.append(el("button",{class:"del",style:"font-size:14px;margin-bottom:4px",onclick:function(){if(confirm("Cancellare tutta la cronologia dello storico? Non si può annullare.")){S.log.slice().forEach(function(x){db.collection("log").doc(x.id).delete().catch(function(){/*x*/})});gone()}}},"Cancella tutta la cronologia"));
- l.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{class:"row"},[el("span",{class:"big"},who(x.by)+" ha "+x.act),el("span",{class:"tag"},when(x.ts))]),el("div",{class:"mu"},(F[x.sec]?F[x.sec].t+": ":"Persona: ")+x.txt),el("button",{class:"del",onclick:function(){db.collection("log").doc(x.id).delete().catch(function(){}),gone()}},"Elimina")]))});
+function allenamenti(app){
+ var d=S.allenamenti.filter(function(x){return x.id==="allenamenti-main"})[0],txt=d?(d.testo||""):"";
+ app.append(el("h2",{},"Hello world"));
+ var ta=el("textarea",{rows:"10",placeholder:admin?"Scrivi qui gli allenamenti…":"Gli allenatori non hanno ancora scritto nulla."});
+ ta.value=(admin&&DRAFT!==null)?DRAFT:txt;
+ if(admin)ta.oninput=function(){DRAFT=ta.value};else ta.setAttribute("readonly","readonly");
+ app.append(ta);
+ if(admin)app.append(el("div",{style:"height:10px"}),el("button",{onclick:function(){db.collection("allenamenti").doc("allenamenti-main").set({testo:ta.value,ts:Date.now(),by:me}).catch(function(){});DRAFT=null;toast("Salvato ✓")}},"Salva"));
 }
 function ini(n){var p=n.split(" ");return (p[0].charAt(0)+(p.length>1?p[p.length-1].charAt(0):"")).toUpperCase()}
 function photo(k){var x=S.profili.filter(function(r){return r.k===k})[0];return x?x.img:null}
@@ -260,14 +281,15 @@ function addPerson(){
  db.collection("persone").doc(uid()).set({nome:n,ts:Date.now(),by:me}).catch(function(){});
  logit("aggiunto","persone",n);
 }
-var tmr=null;
+var tmr=null,ATH="",DRAFT=null;
 function toast(m){var t=document.getElementById("toast");if(!t){t=el("div",{id:"toast",class:"toast"});document.body.append(t)}t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2800)}
 function gone(){toast(navigator.onLine?"Eliminazione completata ✓":"Eliminato: si sincronizza quando torna la rete")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
-function logit(act,k,txt){db.collection("log").doc(uid()).set({by:me,ts:Date.now(),act:act,sec:k,txt:txt}).catch(function(){})}
+function logit(){}
 function add(k,inp){
  var v={},any=false;F[k].f.forEach(function(f){v[f[0]]=inp[f[0]].value.trim();if(v[f[0]]&&f[0]!=="data")any=true});
  if(!any)return;
+ if(admin){var an=inp._a?inp._a.value:"";if(!an){alert("Scegli prima l’atleta");return}v.for=an}
  v.by=me;v.ts=Date.now();
  db.collection(k).doc(uid()).set(v).catch(function(){});
  logit("aggiunto",k,summary(k,v));
@@ -287,10 +309,10 @@ async function init(){
  try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync)}catch(e){db=null}
  try{var sv=JSON.parse(localStorage.getItem("atl_ses")||"null");if(sv&&sv.n&&(sv.h===H_ALL||sv.h===H_ADM))setSes(sv.n,sv.h)}catch(e){}
  if(!db){render();return}
- ["gare","pesi","rincorse"].concat(["log","persone","profili"]).forEach(function(k){
+ ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
-   loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(t!=="INPUT"&&t!=="SELECT")render()});
+   loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
   },function(){});
  });
  render();
