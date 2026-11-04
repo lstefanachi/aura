@@ -57,6 +57,7 @@ button.red{color:var(--er)}
 .thb{position:relative}
 .thb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
 .thb button.x{position:absolute;top:4px;right:4px;width:26px;height:26px;padding:0;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:16px;line-height:1}
+.ath.mine{border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
 </style>
 </head>
 <body>
@@ -188,7 +189,7 @@ function home(app){
  if(co.length){
   app.append(el("h2",{},"Allenatori"));
   var gc=el("div",{class:"grid"});
-  co.forEach(function(x){gc.append(el("div",{class:"ath"},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt"},"Allenatore")]))});
+  co.forEach(function(x){gc.append(el("div",{class:"ath"+(x.k==="id:"+ses.n?" mine":"")},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt"},"Allenatore")]))});
   app.append(gc);
  }
  app.append(el("h2",{},"Tutti gli atleti ("+at.length+")"));
@@ -196,7 +197,7 @@ function home(app){
  if(!at.length){app.append(el("div",{class:"mu"},"Nessun atleta ancora: inserisci il primo dato da Gare, Pesi o Rincorse."));return}
  var g=el("div",{class:"grid"});
  at.forEach(function(x){
-  g.append(el("button",{class:"ath",onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]));
+  g.append(el("button",{class:"ath"+(x.k==="id:"+ses.n?" mine":""),onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]));
  });
  app.append(g);
 }
