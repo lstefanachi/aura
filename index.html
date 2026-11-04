@@ -51,6 +51,12 @@ table.tbl th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:
 table.tbl tr:last-child td{border-bottom:0}
 tr.pend td{color:#b26a00}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+button.sec2{background:var(--ac2);color:var(--ac)}
+button.red{color:var(--er)}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.thb{position:relative}
+.thb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block}
+.thb button.x{position:absolute;top:4px;right:4px;width:26px;height:26px;padding:0;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;font-size:16px;line-height:1}
 </style>
 </head>
 <body>
@@ -104,7 +110,7 @@ function notify(c){
  subs[c]({docs:Object.keys(m).map(function(i){var x=m[i];return{id:x.id,data:function(){return x.v},metadata:{hasPendingWrites:x.p}}})});
 }
 async function pull(){
- var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");var r=await q;if(r.error)return;
+ var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");q=q.neq("coll","foto");var r=await q;if(r.error)return;
  var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
@@ -131,7 +137,7 @@ function mkdb(){return{collection:function(c){return{
 function logout(){try{localStorage.removeItem("atl_ses")}catch(e){}ses=null;admin=false;view="home";render()}
 var F={
  gare:{t:"Gare",ic:"🏆",f:[["data","Data","date"],["gara","Gara / disciplina","select",{"Velocità":["50 m","60 m","100 m","150 m","200 m","300 m","400 m"],"Ostacoli":["60 m ostacoli","100 m ostacoli","110 m ostacoli","300 m ostacoli","400 m ostacoli"],"Mezzofondo":["600 m","800 m","1000 m","1500 m"],"Staffette":["4x100 m","4x400 m"],"Salti":["Salto in lungo","Salto triplo","Salto in alto","Salto con l’asta"],"Lanci":["Getto del peso","Lancio del disco","Lancio del giavellotto","Lancio del martello","Lancio del vortex"],"Prove multiple":["Pentathlon","Esathlon","Eptathlon","Decathlon"]}],["kg","Peso attrezzo (kg)","number",null,["Getto del peso","Lancio del disco","Lancio del martello"]],["gr","Peso attrezzo (grammi)","number",null,["Lancio del giavellotto","Lancio del vortex"]],["ris","Risultato","text"],["note","Note","text"]]},
- pesi:{t:"Pesi",ic:"🏋️",f:[["data","Data","date"],["es","Esercizio","text"],["kg","Kg","number"],["serie","Serie × ripetizioni","text"]]},
+ pesi:{t:"Pesi",ic:"🏋️",f:[["data","Data","date"],["es","Esercizio","select",["Girate","Tirate al mento","Stacchi","Castello","Squat libero","Panca"]],["kg","Kg","number"],["serie","Serie × ripetizioni","text"],["note","Note","text"]]},
  rincorse:{t:"Rincorse",ic:"📏",h:1,f:[["disc","Disciplina","select",{"Salti":["Lungo","Triplo","Alto","Asta"],"Lanci":["Giavellotto"]}],["passi","Numero piedi","number",null,null,"p"],["passi2","Numero piedi 2","number",null,"Alto","p"],["np","Numero passi","number"],["note","Note","text"]]}
 };
 function el(t,a,c){var e=document.createElement(t);for(var k in (a||{})){if(k==="onclick")e.onclick=a[k];else e.setAttribute(k,a[k])}
@@ -225,7 +231,7 @@ function atleta(app){
 function section(app,k){
  var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={};
  if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value};inp._a=sa;form.append(el("label",{},"Atleta *"),sa)}
- F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
+ F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},f[0]==="es"?"Scegli l’esercizio…":"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
   var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
   tg.append(w)});
  var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi";if(inp.ris&&inp.gara)inp.ris.placeholder=hint(inp.gara.value)||"Il tuo risultato migliore"};
@@ -284,14 +290,114 @@ function section(app,k){
  draw();
 }
 
+var PH={open:false,items:[],loading:false};
+function b64(u){var t=atob(u.split(",")[1]),a=new Uint8Array(t.length);for(var i=0;i<t.length;i++)a[i]=t.charCodeAt(i);return a}
+function shrink(file){return new Promise(function(res,rej){
+ var rd=new FileReader();rd.onerror=rej;
+ rd.onload=function(){var im=new Image();im.onerror=rej;
+  im.onload=function(){var k=Math.min(1,1400/Math.max(im.width,im.height)),w=Math.round(im.width*k),h=Math.round(im.height*k),c=document.createElement("canvas");
+   c.width=w;c.height=h;var x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,w,h);x.drawImage(im,0,0,w,h);
+   res({img:c.toDataURL("image/jpeg",0.75),w:w,h:h})};
+  im.src=rd.result};
+ rd.readAsDataURL(file);
+})}
+function makePdf(im){
+ var parts=[],off=0,xs=[],te=new TextEncoder();
+ function put(x){var b=typeof x==="string"?te.encode(x):x;parts.push(b);off+=b.length}
+ function obj(n){xs[n]=off}
+ var N=im.length,kids=[];for(var i=0;i<N;i++)kids.push((3+3*i)+" 0 R");
+ put("%PDF-1.4\n");
+ obj(1);put("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+ obj(2);put("2 0 obj\n<< /Type /Pages /Kids ["+kids.join(" ")+"] /Count "+N+" >>\nendobj\n");
+ im.forEach(function(m,i){
+  var p=3+3*i,c=p+1,g=p+2,PW=595,PH2=842,mg=24,sc=Math.min((PW-2*mg)/m.w,(PH2-2*mg)/m.h),w=m.w*sc,h=m.h*sc,x=(PW-w)/2,y=(PH2-h)/2;
+  var ct="q "+w.toFixed(2)+" 0 0 "+h.toFixed(2)+" "+x.toFixed(2)+" "+y.toFixed(2)+" cm /Im0 Do Q";
+  obj(p);put(p+" 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 "+g+" 0 R >> >> /Contents "+c+" 0 R >>\nendobj\n");
+  obj(c);put(c+" 0 obj\n<< /Length "+ct.length+" >>\nstream\n"+ct+"\nendstream\nendobj\n");
+  obj(g);put(g+" 0 obj\n<< /Type /XObject /Subtype /Image /Width "+m.w+" /Height "+m.h+" /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "+m.b.length+" >>\nstream\n");put(m.b);put("\nendstream\nendobj\n");
+ });
+ var total=3+3*N,xo=off,t="xref\n0 "+total+"\n0000000000 65535 f \n";
+ for(var n=1;n<total;n++)t+=("0000000000"+xs[n]).slice(-10)+" 00000 n \n";
+ put(t+"trailer\n<< /Size "+total+" /Root 1 0 R >>\nstartxref\n"+xo+"\n%%EOF");
+ return new Blob(parts,{type:"application/pdf"});
+}
+function pdfMeta(){return S.allenamenti.filter(function(x){return x.id==="allenamenti-pdf"})[0]}
+async function openPdf(ids,title){
+ var w=window.open("","_blank");toast("Preparo il PDF…");
+ var r=await SB.from("entries").select("id,data").in("id",ids);
+ if(r.error||!r.data||!r.data.length){if(w)w.close();alert("Non riesco a caricare il PDF: controlla la connessione.");return}
+ var m={};r.data.forEach(function(x){m[x.id]=x.data});
+ var im=ids.filter(function(i){return m[i]}).map(function(i){return {b:b64(m[i].img),w:m[i].w,h:m[i].h}});
+ var url=URL.createObjectURL(makePdf(im));
+ if(w)w.location.href=url;else{var a=document.createElement("a");a.href=url;a.download=((title||"Allenamento").replace(/[\\\/:*?"<>|]+/g,"")||"Allenamento")+".pdf";document.body.append(a);a.click();a.remove()}
+}
+async function addFiles(fl){
+ var a=Array.prototype.slice.call(fl);
+ if(PH.items.length+a.length>40){alert("Puoi inserire al massimo 40 foto.");return}
+ toast("Elaboro le foto…");
+ for(var i=0;i<a.length;i++){try{var r=await shrink(a[i]);r.id=null;PH.items.push(r)}catch(e){}}
+ render();
+}
+async function editPdf(){
+ var m0=pdfMeta(),ids=(m0&&m0.ids)||[];
+ PH={open:true,items:[],loading:true,title:(m0&&m0.title)||""};render();
+ var r=await SB.from("entries").select("id,data").in("id",ids);
+ if(r.error){PH={open:false,items:[],loading:false};alert("Non riesco a caricare le foto: controlla la connessione.");render();return}
+ var m={};r.data.forEach(function(x){m[x.id]=x.data});
+ PH.items=ids.filter(function(i){return m[i]}).map(function(i){return {id:i,img:m[i].img,w:m[i].w,h:m[i].h}});
+ PH.loading=false;render();
+}
+async function savePdf(){
+ if(!navigator.onLine){alert("Serve la connessione per salvare le foto.");return}
+ var m0=pdfMeta(),old=(m0&&m0.ids)||[],ids=[],up=[];
+ toast("Salvataggio in corso…");
+ for(var i=0;i<PH.items.length;i++){
+  var it=PH.items[i];
+  if(!it.id){
+   var id="foto-"+uid(),r=await SB.from("entries").upsert({id:id,coll:"foto",data:{img:it.img,w:it.w,h:it.h}});
+   if(r.error){if(up.length)await SB.from("entries").delete().in("id",up);alert("Caricamento non riuscito: "+r.error.message);return}
+   it.id=id;up.push(id);
+  }
+  ids.push(it.id);
+ }
+ var gone2=old.filter(function(x){return ids.indexOf(x)<0});
+ if(gone2.length)await SB.from("entries").delete().in("id",gone2);
+ db.collection("allenamenti").doc("allenamenti-pdf").set({ids:ids,ts:Date.now(),by:me,title:(PH.title||"").trim()||"Allenamento"}).catch(function(){});
+ PH={open:false,items:[],loading:false};
+ toast("PDF salvato ✓");render();
+}
+async function delPdf(){
+ if(!confirm("Eliminare il PDF e tutte le sue foto? Non si può annullare."))return;
+ var m0=pdfMeta(),ids=(m0&&m0.ids)||[];
+ var r=await SB.from("entries").delete().eq("coll","foto");
+ if(r.error){alert("Eliminazione non riuscita: controlla la connessione.");return}
+ db.collection("allenamenti").doc("allenamenti-pdf").delete().catch(function(){});
+ PH={open:false,items:[],loading:false};gone();render();
+}
+function editor(app,exists){
+ var f=el("input",{type:"file",accept:"image/*",multiple:"multiple",style:"display:none"});
+ f.onchange=function(){if(f.files.length){addFiles(f.files)}f.value=""};
+ var ti=el("input",{type:"text",placeholder:"Allenamento",maxlength:"60"});ti.value=PH.title||"";ti.oninput=function(){PH.title=ti.value};
+ var c=el("div",{class:"card"},[el("div",{class:"big"},exists?"Modifica il PDF":"Carica il tuo allenamento"),el("div",{class:"mu"},"Aggiungi le foto e poi salva: il PDF avrà una foto per pagina."),el("label",{},"Titolo del PDF"),ti,el("div",{style:"height:10px"}),el("button",{onclick:function(){f.click()}},"＋ Aggiungi foto"),f]);
+ if(PH.loading)c.append(el("div",{class:"mu",style:"margin-top:10px"},"Caricamento foto…"));
+ var g=el("div",{class:"thumbs"});
+ PH.items.forEach(function(it,i){g.append(el("div",{class:"thb"},[el("img",{src:it.img}),el("button",{class:"x",onclick:function(){PH.items.splice(i,1);render()}},"×")]))});
+ c.append(g);
+ if(PH.items.length)c.append(el("div",{class:"tag",style:"margin-top:8px"},PH.items.length+" foto"),el("div",{style:"height:8px"}),el("button",{onclick:savePdf},exists?"Salva PDF":"Crea PDF"));
+ if(exists)c.append(el("button",{class:"link",style:"margin-top:6px",onclick:function(){PH={open:false,items:[],loading:false};render()}},"Annulla"));
+ app.append(c);
+}
+function pdfSection(app){
+ var m0=pdfMeta(),ids=(m0&&m0.ids)||[];
+ app.append(el("h2",{},"Allenamento"));
+ if(ids.length){
+  app.append(el("div",{class:"card"},[el("div",{class:"big"},"📄 "+(m0.title||"Allenamento")),el("div",{class:"mu"},ids.length+" foto · aggiornato il "+when(m0.ts)),el("div",{style:"height:10px"}),el("button",{onclick:function(){openPdf(ids,m0.title)}},"Apri PDF"),
+   admin?el("div",{style:"display:flex;gap:10px;margin-top:8px"},[el("button",{class:"sec2",onclick:editPdf},"Modifica"),el("button",{class:"sec2 red",onclick:delPdf},"Elimina")]):""]));
+ }else if(!admin)app.append(el("div",{class:"mu"},"Nessun PDF disponibile."));
+ if(admin&&(PH.open||!ids.length))editor(app,ids.length>0);
+}
 function allenamenti(app){
- var d=S.allenamenti.filter(function(x){return x.id==="allenamenti-main"})[0],txt=d?(d.testo||""):"";
- app.append(el("h2",{},"Hello world"));
- var ta=el("textarea",{rows:"10",placeholder:admin?"Scrivi qui gli allenamenti…":"Gli allenatori non hanno ancora scritto nulla."});
- ta.value=(admin&&DRAFT!==null)?DRAFT:txt;
- if(admin)ta.oninput=function(){DRAFT=ta.value};else ta.setAttribute("readonly","readonly");
- app.append(ta);
- if(admin)app.append(el("div",{style:"height:10px"}),el("button",{onclick:function(){db.collection("allenamenti").doc("allenamenti-main").set({testo:ta.value,ts:Date.now(),by:me}).catch(function(){});DRAFT=null;toast("Salvato ✓")}},"Salva"));
+ pdfSection(app);
 }
 function ini(n){var p=n.split(" ");return (p[0].charAt(0)+(p.length>1?p[p.length-1].charAt(0):"")).toUpperCase()}
 function photo(k){var x=S.profili.filter(function(r){return r.k===k})[0];return x?x.img:null}
@@ -343,7 +449,7 @@ function lowWins(g){
 function fmtD(d){return d?String(d).split("-").reverse().join("/"):""}
 var COLS={
  gare:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Gara",function(r){return r.gara||""},"s"],["Attrezzo",function(r){return r.kg?r.kg+" kg":(r.gr?r.gr+" g":"")}],["Risultato",function(r){return r.ris||""}],["Note",function(r){return r.note||""}]],
- pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return r.kg||""},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}]],
+ pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return r.kg||""},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Note",function(r){return r.note||""}]],
  rincorse:[["Atleta",function(r){return nm(r)},"a"],["Disciplina",function(r){return r.disc||""},"s"],["Piedi",function(r){return r.passi2?r.passi+" / "+r.passi2:(r.passi||"")}],["Passi",function(r){return r.np||""}],["Note",function(r){return r.note||""}],["Inserita",function(r){return new Date(r.ts).toLocaleDateString("it-IT")},"",function(r){return r.ts}]]
 };
 var SPL={gare:"Tutte le gare",pesi:"Tutti gli esercizi",rincorse:"Tutte le discipline"};
