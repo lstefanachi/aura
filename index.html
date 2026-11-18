@@ -153,7 +153,7 @@ function mkdb(){return{collection:function(c){return{
 function logout(){try{localStorage.removeItem("atl_ses")}catch(e){}ses=null;admin=false;view="home";render()}
 var F={
  gare:{t:"Gare",ic:"🏆",f:[["data","Data","date"],["gara","Gara / disciplina","select",{"Velocità":["50 m","60 m","100 m","150 m","200 m","300 m","400 m"],"Ostacoli":["60 m ostacoli","100 m ostacoli","110 m ostacoli","300 m ostacoli","400 m ostacoli"],"Mezzofondo":["600 m","800 m","1000 m","1500 m"],"Staffette":["4x100 m","4x400 m"],"Salti":["Salto in lungo","Salto triplo","Salto in alto","Salto con l’asta"],"Lanci":["Getto del peso","Lancio del disco","Lancio del giavellotto","Lancio del martello","Lancio del vortex"],"Prove multiple":["Pentathlon","Esathlon","Eptathlon","Decathlon"]}],["kg","Peso attrezzo (kg)","number",null,["Getto del peso","Lancio del disco","Lancio del martello"]],["gr","Peso attrezzo (grammi)","number",null,["Lancio del giavellotto","Lancio del vortex"]],["ris","Risultato","text"],["note","Note","text"]]},
- pesi:{t:"Pesi",ic:"🏋️",f:[["data","Data","date"],["es","Esercizio","select",["Girate","Tirate al mento","Stacchi","Castello","Squat libero","Panca"]],["kg","Kg","number"],["serie","Serie × ripetizioni","text"],["note","Note","text"]]},
+ pesi:{t:"Pesi",ic:"🏋️",f:[["data","Data","date"],["es","Esercizio","select",["Girate","Tirate al mento","Stacchi","Castello","Squat libero","Squat frontale","Panca"]],["kg","Kg","number"],["serie","Serie × ripetizioni","text"],["note","Note","text"]]},
  rincorse:{t:"Rincorse",ic:"📏",h:1,f:[["disc","Disciplina","select",{"Salti":["Lungo","Triplo","Alto","Asta"],"Lanci":["Giavellotto"]}],["passi","Numero piedi","number",null,null,"p"],["passi2","Numero piedi 2","number",null,"Alto","p"],["np","Numero passi","number"],["note","Note","text"]]}
 };
 function el(t,a,c){var e=document.createElement(t);for(var k in (a||{})){if(k==="onclick")e.onclick=a[k];else e.setAttribute(k,a[k])}
@@ -225,7 +225,7 @@ function atleta(app){
  function head(t){app.append(el("div",{class:"sec"},t))}
  function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
  function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{style:"white-space:pre-line"},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
- var canP=admin||sel==="id:"+ses.n,g=mine("gare"),p=canP?mine("pesi"):[],r=mine("rincorse");
+ var canP=admin||sel==="id:"+ses.n,g=mine("gare"),p=canP?mine("pesi"):[],r=canP?mine("rincorse"):[];
  head("🏆 Gare");
  if(g.length)items("gare",g);else none();
  head("🏋️ Pesi");
@@ -236,7 +236,7 @@ function atleta(app){
   app.append(c);items("pesi",p);
  }else none();
  head("📏 Rincorse");
- if(r.length){
+ if(!canP)app.append(el("div",{class:"mu"},"Le rincorse sono visibili solo all’atleta e agli allenatori."));else if(r.length){
   var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
   var c2=el("div",{class:"card"},el("div",{class:"tag"},"Attuali"));
   Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("div",{class:"big",style:"text-align:right"},rincLines(x).split("\n").slice(1).filter(function(t){return t.indexOf("Note:")!==0}).map(function(t){return el("div",{},t)}))]))});
@@ -244,19 +244,35 @@ function atleta(app){
  }else none();
  if(admin&&!g.length&&!p.length&&!r.length)S.persone.filter(function(x){return "id:"+x.nome===sel}).forEach(function(x){topc.append(el("button",{class:"del",style:"margin-left:auto;text-align:right",onclick:function(){if(confirm("Rimuovere dall’elenco?")){db.collection("persone").doc(x.id).delete().catch(function(){}),gone();go("home")}}},"Rimuovi dall’elenco"))});
 }
-function pesoCard(r){
+function recCard(k,r,fields){
  var open=false,can=admin||keyOf(r)==="id:"+me;
  function f(l,v){return el("div",{},[el("div",{class:"pl"},l),el("div",{class:"pv"},v)])}
  var fl=[];if(admin)fl.push(f("Atleta",nm(r)));
- fl.push(f("Data",fmtD(r.data)||"–"),f("Kg",r.kg||"–"),f("Serie",r.serie||"–"));
+ fields.forEach(function(x){fl.push(f(x[0],x[1]))});
  var det=el("div",{class:"pdet",style:"display:none"},[el("div",{style:"white-space:pre-line"},r.note?r.note:"Nessuna nota."),el("div",{class:"tag",style:"margin-top:6px"},"Inserito il "+new Date(r.ts).toLocaleDateString("it-IT"))]);
  var chev=el("button",{class:"chev"},"▾"),lk=el("button",{class:"plink"},"Note");
  function tog(){open=!open;det.style.display=open?"block":"none";chev.textContent=open?"▴":"▾"}
  chev.onclick=tog;lk.onclick=tog;
  var acts=[];
- if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:"pesi",id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
- acts.push(el("button",{class:"pill r",onclick:function(){rem("pesi",r)}},"Elimina"),chev);
+ if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:k,id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
+ acts.push(el("button",{class:"pill r",onclick:function(){rem(k,r)}},"Elimina"),chev);
  return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},fl),el("div",{class:"pacts"},acts)]),el("div",{class:"pfoot"},[el("span",{class:"pmu"+(r._p?" pendt":"")},r._p?"In attesa di rete":(r.note?"1 nota":"Nessuna nota")),lk]),det]);
+}
+function pesoCard(r){return recCard("pesi",r,[["Data",fmtD(r.data)||"–"],["Kg",r.kg||"–"],["Serie",r.serie||"–"]])}
+function rincCard(r){
+ var f=[];if(r.mis)f.push(["Distanza",r.mis+" m"]);
+ f.push(["Piedi",[r.passi,r.passi2].filter(Boolean).join(" / ")||"–"],["Passi",r.np||"–"],["Aggiornata",new Date(r.ts).toLocaleDateString("it-IT")]);
+ return recCard("rincorse",r,f);
+}
+function drawRinc(rows,box){
+ var o=F.rincorse.f.filter(function(f){return f[0]==="disc"})[0][3],base=[].concat.apply([],Object.keys(o).map(function(g){return o[g]})),gr={},order=[];
+ rows.forEach(function(r){var e=r.disc||"Altro";if(!gr[e]){gr[e]=[];order.push(e)}gr[e].push(r)});
+ order.sort(function(a,b){var x=base.indexOf(a),y=base.indexOf(b);if(x<0)x=99;if(y<0)y=99;return x-y||a.localeCompare(b,"it")});
+ order.forEach(function(e){
+  var g=gr[e].sort(function(a,b){return b.ts-a.ts});
+  box.append(el("div",{class:"sec"},e+" ("+g.length+")"));
+  g.forEach(function(r){box.append(rincCard(r))});
+ });
 }
 function drawPesi(rows,box){
  var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3],gr={},order=[];
@@ -287,14 +303,14 @@ function section(app,k){
   var c0=inp.disc||inp.gara;if(c0&&c0.onchange)c0.onchange();
  }
  if(k==="gare")app.append(el("div",{class:"note"},"ℹ️ Inserisci solo il tuo risultato migliore per ogni specialità. Se la specialità è già presente, resta solo il risultato migliore."));
- app.append(form,el("h2",{},(k==="pesi"&&!admin)?"I miei pesi":"Dati inseriti"));
- var FL=FIL[k]||(FIL[k]={a:"",s:"",q:"",c:-1,d:1}),C=COLS[k],tbl=el("div",{}),all=(k==="pesi"&&!admin)?S[k].filter(function(r){return keyOf(r)==="id:"+me}):S[k];
+ app.append(form,el("h2",{},((k==="pesi"||k==="rincorse")&&!admin)?(k==="pesi"?"I miei pesi":"Le mie rincorse"):"Dati inseriti"));
+ var FL=FIL[k]||(FIL[k]={a:"",s:"",q:"",c:-1,d:1}),C=COLS[k],tbl=el("div",{}),all=((k==="pesi"||k==="rincorse")&&!admin)?S[k].filter(function(r){return keyOf(r)==="id:"+me}):S[k];
  var si=C.map(function(c){return c[2]}).indexOf("s");
  function uniq(fn){var m={};all.forEach(function(r){var v=fn(r);if(v)m[v]=1});return Object.keys(m).sort(function(x,y){return x.localeCompare(y,"it")})}
  var fa=el("select",{}),fs=el("select",{}),fq=el("input",{type:"search",placeholder:"Cerca in tutta la tabella…",style:"margin-top:8px"});
  fa.append(el("option",{value:""},"Tutti gli atleti"));uniq(nm).forEach(function(v){fa.append(el("option",{value:v},v))});
  fs.append(el("option",{value:""},SPL[k]));uniq(C[si][1]).forEach(function(v){fs.append(el("option",{value:v},v))});
- if(k==="pesi"&&!admin){FL.a="";fs.style.gridColumn="1 / -1"}
+ if((k==="pesi"||k==="rincorse")&&!admin){FL.a="";fs.style.gridColumn="1 / -1"}
  fa.value=FL.a;FL.a=fa.value;fs.value=FL.s;FL.s=fs.value;fq.value=FL.q;
  function draw(){
   tbl.replaceChildren();
@@ -312,6 +328,7 @@ function section(app,k){
   tbl.append(el("div",{class:"tag",style:"margin:8px 0 6px"},rows.length+" di "+all.length+" righe"));
   if(!rows.length){tbl.append(el("div",{class:"mu"},all.length?"Nessun dato con questi filtri.":"Nessun dato inserito."));return}
   if(k==="pesi"){drawPesi(rows,tbl);return}
+  if(k==="rincorse"){drawRinc(rows,tbl);return}
   var th=el("tr",{});
   C.forEach(function(c,i){th.append(el("th",{onclick:function(){if(FL.c===i)FL.d=-FL.d;else{FL.c=i;FL.d=1}draw()}},c[0]+(FL.c===i?(FL.d>0?" ▲":" ▼"):"")))});
   th.append(el("th",{style:"cursor:default"},""));
@@ -327,7 +344,7 @@ function section(app,k){
  fa.onchange=function(){FL.a=fa.value;draw()};
  fs.onchange=function(){FL.s=fs.value;draw()};
  fq.oninput=function(){FL.q=fq.value;draw()};
- app.append(el("div",{class:"card"},[el("div",{class:"tag"},"Filtri"),el("div",{class:"fgrid",style:"margin-top:6px"},(k==="pesi"&&!admin)?[fs]:[fa,fs]),fq,
+ app.append(el("div",{class:"card"},[el("div",{class:"tag"},"Filtri"),el("div",{class:"fgrid",style:"margin-top:6px"},((k==="pesi"||k==="rincorse")&&!admin)?[fs]:[fa,fs]),fq,
   el("button",{class:"link",style:"margin-top:6px",onclick:function(){FL.a=FL.s=FL.q="";FL.c=-1;FL.d=1;fa.value="";fs.value="";fq.value="";draw()}},"Azzera filtri")]),tbl);
  draw();
 }
