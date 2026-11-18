@@ -476,10 +476,11 @@ function lavCard(r){
  var acts=[];
  if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:"lavori",id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
  acts.push(el("button",{class:"pill r",onclick:function(){rem("lavori",r)}},"Elimina"));
- return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},[f("Ripetute",r.rip||"–"),f("N. ripetute",r.nrip||"–"),f("Recupero",r.rec||"–")]),el("div",{class:"pacts"},acts)]),tempiTable(r),el("div",{class:"pfoot"},[el("span",{class:"pmu"+(r._p?" pendt":"")},r._p?"In attesa di rete":"Inserito il "+new Date(r.ts).toLocaleDateString("it-IT"))])]);
+ var foot=r._p?[el("div",{class:"pfoot"},[el("span",{class:"pmu pendt"},"In attesa di rete")])]:[];
+ return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},[f("Ripetute",r.rip||"–"),f("N. ripetute",r.nrip||"–"),f("Recupero",r.rec||"–"),f("Data",fmtD(r.data)||"–")]),el("div",{class:"pacts"},acts)]),tempiTable(r)].concat(foot));
 }
 function saveLav(){
- var v={rip:LS.v.rip,nrip:LS.v.nrip,rec:LS.v.rec,tempi:LS.t};
+ var v={rip:LS.v.rip,nrip:LS.v.nrip,rec:LS.v.rec,data:LS.v.data,tempi:LS.t};
  if(LS.id){
   var ed=S.lavori.filter(function(r){return r.id===LS.id})[0];
   if(ed){var o={};for(var q in ed)if(q!=="id"&&q!=="_p")o[q]=ed[q];for(var z in v)o[z]=v[z];db.collection("lavori").doc(LS.id).set(o).catch(function(){})}
@@ -517,23 +518,24 @@ function lavori(app){
  if(LS){lavTempi(app);return}
  var ed=(EDIT&&EDIT.k==="lavori")?S.lavori.filter(function(r){return r.id===EDIT.id})[0]:null;
  if(EDIT&&EDIT.k==="lavori"&&!ed)EDIT=null;
- var rp=el("input",{type:"text"}),nr=el("input",{type:"number",inputmode:"numeric",min:"1",max:"20"}),rc=el("input",{type:"text"});
- var iv=DL||(ed?{rip:ed.rip||"",nrip:ed.nrip||"1",rec:ed.rec||""}:{rip:"",nrip:"1",rec:""});
- rp.value=iv.rip;nr.value=iv.nrip;rc.value=iv.rec;
+ var rp=el("input",{type:"text"}),nr=el("input",{type:"number",inputmode:"numeric",min:"1",max:"20"}),rc=el("input",{type:"text"}),dt=el("input",{type:"date"});
+ var today=new Date().toISOString().slice(0,10);
+ var iv=DL||(ed?{rip:ed.rip||"",nrip:ed.nrip||"1",rec:ed.rec||"",data:ed.data||today}:{rip:"",nrip:"1",rec:"",data:today});
+ rp.value=iv.rip;nr.value=iv.nrip;rc.value=iv.rec;dt.value=iv.data;
  function next(){
-  var m=[];if(!rp.value.trim())m.push("Ripetute");if(!nr.value.trim())m.push("Numero ripetute");if(!rc.value.trim())m.push("Recupero");
+  var m=[];if(!rp.value.trim())m.push("Ripetute");if(!nr.value.trim())m.push("Numero ripetute");if(!rc.value.trim())m.push("Recupero");if(!dt.value.trim())m.push("Data");
   if(m.length){alert("Compila i campi obbligatori: "+m.join(", "));return}
   var n=parseInt(nr.value,10),dist=parseRip(rp.value);
   if(!(n>=1)||n>20){alert("Il numero ripetute deve essere tra 1 e 20.");return}
   var old=(ed&&ed.tempi)||[];
   var t=dist.map(function(d,i){var row=[];for(var j=0;j<n;j++)row.push((old[i]&&old[i][j])||"");return row});
-  LS={v:{rip:rp.value.trim(),nrip:String(n),rec:rc.value.trim()},dist:dist,n:n,t:t,id:ed?ed.id:null,nome:nome};
+  LS={v:{rip:rp.value.trim(),nrip:String(n),rec:rc.value.trim(),data:dt.value.trim()},dist:dist,n:n,t:t,id:ed?ed.id:null,nome:nome};
   render();window.scrollTo(0,0);
  }
- var form=el("div",{class:"card"},[el("div",{class:"big"},ed?"Modifica lavoro":(admin?"Nuovo lavoro per "+nome:"Nuovo lavoro")),el("label",{},"Ripetute *"),rp,el("label",{},"Numero ripetute *"),nr,el("label",{},"Recupero *"),rc,el("div",{class:"tag",style:"margin-top:10px"},"* campo obbligatorio"),el("div",{style:"height:8px"}),el("button",{onclick:next},ed?"Salva modifiche":"Salva")]);
+ var form=el("div",{class:"card"},[el("div",{class:"big"},ed?"Modifica lavoro":(admin?"Nuovo lavoro per "+nome:"Nuovo lavoro")),el("label",{},"Ripetute *"),rp,el("label",{},"Numero ripetute *"),nr,el("label",{},"Recupero *"),rc,el("label",{},"Data *"),dt,el("div",{class:"tag",style:"margin-top:10px"},"* campo obbligatorio"),el("div",{style:"height:8px"}),el("button",{onclick:next},ed?"Salva modifiche":"Salva")]);
  if(ed)form.append(el("button",{class:"link",style:"margin-top:6px",onclick:function(){EDIT=null;DL=null;render()}},"Annulla modifica"));
  app.append(form,el("h2",{},admin?"Lavori di "+nome:"I miei lavori"));
- var rows=S.lavori.filter(function(r){return keyOf(r)===key}).sort(function(a,b){return b.ts-a.ts});
+ var rows=S.lavori.filter(function(r){return keyOf(r)===key}).sort(function(a,b){return (b.data||"").localeCompare(a.data||"")||b.ts-a.ts});
  if(!rows.length){app.append(el("div",{class:"mu"},"Nessun lavoro inserito."));return}
  rows.forEach(function(r){app.append(lavCard(r))});
 }
@@ -593,7 +595,7 @@ var COLS={
  pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return r.kg||""},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Note",function(r){return r.note||""}]],
  rincorse:[["Atleta",function(r){return nm(r)},"a"],["Disciplina",function(r){return r.disc||""},"s"],["Piedi",function(r){return r.passi2?r.passi+" / "+r.passi2:(r.passi||"")}],["Passi",function(r){return r.np||""}],["Note",function(r){return r.note||""}],["Inserita",function(r){return new Date(r.ts).toLocaleDateString("it-IT")},"",function(r){return r.ts}]]
 };
-F.lavori={t:"Lavori",ic:"🛠️",f:[["rip","Ripetute","text"],["nrip","Numero ripetute","number"],["rec","Recupero","text"]]};
+F.lavori={t:"Lavori",ic:"🛠️",f:[["rip","Ripetute","text"],["nrip","Numero ripetute","number"],["rec","Recupero","text"],["data","Data","date"]]};
 var SPL={gare:"Tutte le gare",pesi:"Tutti gli esercizi",rincorse:"Tutte le discipline"};
 var OPT=["passi","passi2","np","note"];
 function missing(k,inp){
