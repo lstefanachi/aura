@@ -457,9 +457,7 @@ function pdfSection(app){
 }
 var LAV="",LS=null,DL=null;
 function parseRip(t){
- var a=String(t||"").split(/[,;\n]+/).map(function(x){return x.trim()}).filter(Boolean);
- if(a.length===1&&/^\d+(\s+\d+)+$/.test(a[0]))a=a[0].split(/\s+/);
- return a;
+ return String(t||"").split(/[,;\n\/\s_\-|\.]+/).map(function(x){return x.trim()}).filter(Boolean);
 }
 function tempiTable(r){
  var t=r.tempi||[];if(!t.length)return "";
