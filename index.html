@@ -475,7 +475,8 @@ function lavCard(r){
  if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:"lavori",id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
  acts.push(el("button",{class:"pill r",onclick:function(){rem("lavori",r)}},"Elimina"));
  var foot=r._p?[el("div",{class:"pfoot"},[el("span",{class:"pmu pendt"},"In attesa di rete")])]:[];
- return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},[f("Ripetute",r.rip||"–"),f("N. ripetute",r.nrip||"–"),f("Recupero",r.rec||"–"),f("Data",fmtD(r.data)||"–")]),el("div",{class:"pacts"},acts)]),tempiTable(r)].concat(foot));
+ var ripDisp=parseRip(r.rip).join(", ")||"–";
+ return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},[f("Ripetute",ripDisp),f("N. ripetute",r.nrip||"–"),f("Recupero",r.rec||"–"),f("Data",fmtD(r.data)||"–")]),el("div",{class:"pacts"},acts)]),tempiTable(r)].concat(foot));
 }
 function saveLav(){
  var v={rip:LS.v.rip,nrip:LS.v.nrip,rec:LS.v.rec,data:LS.v.data,tempi:LS.t};
