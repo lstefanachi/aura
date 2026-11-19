@@ -225,18 +225,18 @@ function atleta(app){
  function head(t){app.append(el("div",{class:"sec"},t))}
  function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
  function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{style:"white-space:pre-line"},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
- var canP=admin||sel==="id:"+ses.n,g=canP?mine("gare"):[],p=canP?mine("pesi"):[],r=canP?mine("rincorse"):[];
+ var canP=true,g=mine("gare"),p=mine("pesi"),r=mine("rincorse");
  head("🏆 Gare");
- if(!canP)app.append(el("div",{class:"mu"},"Le gare sono visibili solo all’atleta e agli allenatori."));else if(g.length)items("gare",g);else none();
+ if(g.length)items("gare",g);else none();
  head("🏋️ Pesi");
- if(!canP)app.append(el("div",{class:"mu"},"I pesi sono visibili solo all’atleta e agli allenatori."));else if(p.length){
+ if(p.length){
   var best={};p.forEach(function(x){var e=(x.es||"?").trim(),kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[e]||kg>best[e]))best[e]=kg});
   var c=el("div",{class:"card"},el("div",{class:"tag"},"Record"));
   Object.keys(best).forEach(function(e){c.append(el("div",{class:"row"},[el("span",{},e),el("span",{class:"big"},best[e]+" kg")]))});
   app.append(c);items("pesi",p);
  }else none();
  head("📏 Rincorse");
- if(!canP)app.append(el("div",{class:"mu"},"Le rincorse sono visibili solo all’atleta e agli allenatori."));else if(r.length){
+ if(r.length){
   var last={};r.forEach(function(x){var d=(x.disc||"?").trim();if(!last[d])last[d]=x});
   var c2=el("div",{class:"card"},el("div",{class:"tag"},"Attuali"));
   Object.keys(last).forEach(function(d){var x=last[d];c2.append(el("div",{class:"row"},[el("span",{},d),el("div",{class:"big",style:"text-align:right"},rincLines(x).split("\n").slice(1).filter(function(t){return t.indexOf("Note:")!==0}).map(function(t){return el("div",{},t)}))]))});
