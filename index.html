@@ -73,6 +73,18 @@ button.chev{width:36px;height:36px;padding:0;border-radius:50%;background:rgba(4
 .pmu.pendt{color:#b26a00}
 button.plink{width:auto;background:none;color:#4d7cf0;padding:0;font-size:13px;font-weight:600}
 .pdet{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);font-size:14px}
+.ath-wrap{position:relative}
+.star-btn{position:absolute;top:8px;right:8px;width:30px;height:30px;padding:0;border-radius:50%;background:var(--bg);color:var(--mu);font-size:16px;line-height:1;border:1px solid var(--bd);z-index:2;display:flex;align-items:center;justify-content:center}
+.star-btn.on{color:#f5a623;border-color:#f5a623;background:var(--card)}
+.tseg{display:flex;gap:6px;margin-top:8px}
+.tseg button{flex:1;padding:10px 6px;font-size:13px;background:var(--bg);color:var(--tx);border:1px solid var(--bd);font-weight:600}
+.tseg button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.pill.g{background:#2e7d4f}
+.rec-badge{display:inline-block;background:#f5a623;color:#1c1f24;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle}
+@keyframes popIn{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.toast.rec{background:linear-gradient(135deg,#d97706,#f59e0b);color:#1c1f24;font-weight:800;animation:popIn .35s ease}
+.confetti{position:fixed;top:-10px;width:9px;height:9px;border-radius:2px;pointer-events:none;z-index:50;animation:fall 1.6s linear forwards}
+@keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:0}}
 </style>
 </head>
 <body>
@@ -81,6 +93,45 @@ button.plink{width:auto;background:none;color:#4d7cf0;padding:0;font-size:13px;f
 <nav id="nav"></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
+var THEME="auto";
+try{THEME=localStorage.getItem("atl_theme")||"auto"}catch(e){}
+function applyTheme(t){
+ THEME=t||"auto";
+ try{localStorage.setItem("atl_theme",THEME)}catch(e){}
+ if(THEME==="dark"||THEME==="light")document.documentElement.setAttribute("data-theme",THEME);
+ else document.documentElement.removeAttribute("data-theme");
+}
+applyTheme(THEME);
+var FAVS=[];
+try{FAVS=JSON.parse(localStorage.getItem("atl_favs")||"[]")}catch(e){}
+function isFav(k){return FAVS.indexOf(k)>=0}
+function toggleFav(k,ev){
+ if(ev)ev.stopPropagation();
+ var i=FAVS.indexOf(k);
+ if(i>=0)FAVS.splice(i,1);else FAVS.push(k);
+ try{localStorage.setItem("atl_favs",JSON.stringify(FAVS))}catch(e){}
+ render();
+}
+function celebrate(){
+ var cols=["#f5a623","#7b3fa0","#2e7d4f","#2f5fd0","#e11d48"];
+ for(var i=0;i<28;i++){
+  var c=document.createElement("div");c.className="confetti";
+  c.style.left=(Math.random()*100)+"vw";
+  c.style.background=cols[i%cols.length];
+  c.style.animationDelay=(Math.random()*0.35)+"s";
+  document.body.append(c);
+  (function(el){setTimeout(function(){el.remove()},2100)})(c);
+ }
+}
+function copyText(txt){
+ if(navigator.clipboard&&navigator.clipboard.writeText){
+  navigator.clipboard.writeText(txt).then(function(){toast("Copiato negli appunti ✓")}).catch(function(){fallbackCopy(txt)});
+ }else fallbackCopy(txt);
+}
+function fallbackCopy(txt){
+ var ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";
+ document.body.append(ta);ta.select();try{document.execCommand("copy");toast("Copiato negli appunti ✓")}catch(e){}ta.remove();
+}
 var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
 async function sha(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atl|"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
@@ -210,9 +261,16 @@ function home(app){
  app.append(el("h2",{},"Tutti gli atleti ("+at.length+")"));
  app.append(el("button",{onclick:addPerson,style:"margin-bottom:12px"},"＋ Aggiungi persona"));
  if(!at.length){app.append(el("div",{class:"mu"},"Nessun atleta ancora: inserisci il primo dato da Gare, Pesi o Rincorse."));return}
+ var sortedAt=at.slice().sort(function(a,b){
+  var fa=isFav(a.k)?0:1,fb=isFav(b.k)?0:1;
+  return fa-fb||a.n.localeCompare(b.n);
+ });
  var g=el("div",{class:"grid"});
- at.forEach(function(x){
-  g.append(el("button",{class:"ath"+(x.k==="id:"+ses.n?" mine":""),onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]));
+ sortedAt.forEach(function(x){
+  var fav=isFav(x.k);
+  var btn=el("button",{class:"ath"+(x.k==="id:"+ses.n?" mine":""),onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]);
+  var st=el("button",{class:"star-btn"+(fav?" on":""),title:fav?"Rimuovi dai preferiti":"Fissa in alto",onclick:function(e){toggleFav(x.k,e)}},fav?"★":"☆");
+  g.append(el("div",{class:"ath-wrap"},[btn,st]));
  });
  app.append(g);
 }
@@ -254,11 +312,23 @@ function recCard(k,r,fields){
  function tog(){open=!open;det.style.display=open?"block":"none";chev.textContent=open?"▴":"▾"}
  chev.onclick=tog;lk.onclick=tog;
  var acts=[];
+ if(k==="rincorse"){
+  acts.push(el("button",{class:"pill g",onclick:function(){copyText("📏 Rincorsa "+nm(r)+"\n"+rincLines(r))}},"Copia"));
+ }
  if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:k,id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
  acts.push(el("button",{class:"pill r",onclick:function(){rem(k,r)}},"Elimina"),chev);
  return el("div",{class:"pcard"},[el("div",{class:"prow"},[el("div",{class:"pfields"},fl),el("div",{class:"pacts"},acts)]),el("div",{class:"pfoot"},[el("span",{class:"pmu"+(r._p?" pendt":"")},r._p?"In attesa di rete":(r.note?"1 nota":"Nessuna nota")),lk]),det]);
 }
-function pesoCard(r){return recCard("pesi",r,[["Data",fmtD(r.data)||"–"],["Kg",r.kg||"–"],["Serie",r.serie||"–"]])}
+function isBestPeso(r){
+ var kg=parseFloat(r.kg);if(isNaN(kg)||kg<=0)return false;
+ var key=keyOf(r),es=(r.es||"").trim(),max=0;
+ S.pesi.forEach(function(x){if(keyOf(x)===key&&(x.es||"").trim()===es){var v=parseFloat(x.kg);if(!isNaN(v)&&v>max)max=v}});
+ return kg>=max&&max>0;
+}
+function pesoCard(r){
+ var kgEl=isBestPeso(r)?el("span",{},[r.kg||"–",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"–");
+ return recCard("pesi",r,[["Data",fmtD(r.data)||"–"],["Kg",kgEl],["Serie",r.serie||"–"]]);
+}
 function rincCard(r){
  var f=[];if(r.mis)f.push(["Distanza",r.mis+" m"]);
  f.push(["Piedi",[r.passi,r.passi2].filter(Boolean).join(" / ")||"–"],["Passi",r.np||"–"],["Aggiornata",new Date(r.ts).toLocaleDateString("it-IT")]);
@@ -468,10 +538,19 @@ function tempiTable(r){
  t.forEach(function(row,i){var tr=el("tr",{},[el("td",{style:"font-weight:700;white-space:nowrap"},(d[i]||"")+" →")]);for(var j=0;j<n;j++)tr.append(el("td",{},row[j]||"–"));body.append(tr)});
  return el("div",{class:"tw",style:"margin-top:10px"},el("table",{class:"tbl"},[el("thead",{},th),body]));
 }
+function lavSummaryText(r){
+ var d=parseRip(r.rip),t=r.tempi||[];
+ var lines=["🛠️ Lavoro "+nm(r)+(r.data?" ("+fmtD(r.data)+")":""),"Ripetute: "+(d.join(", ")||"–")+" | N. rip: "+(r.nrip||"–")+" | Rec: "+(r.rec||"–")];
+ t.forEach(function(row,i){
+  var vals=row.filter(Boolean);
+  if(vals.length)lines.push((d[i]||"Serie "+(i+1))+": "+vals.join(" - "));
+ });
+ return lines.join("\n");
+}
 function lavCard(r){
  var can=admin||keyOf(r)==="id:"+me;
  function f(l,v){return el("div",{},[el("div",{class:"pl"},l),el("div",{class:"pv",style:"white-space:pre-line"},v)])}
- var acts=[];
+ var acts=[el("button",{class:"pill g",onclick:function(){copyText(lavSummaryText(r))}},"Copia")];
  if(can)acts.push(el("button",{class:"pill b",onclick:function(){EDIT={k:"lavori",id:r.id};render();window.scrollTo(0,0)}},"Modifica"));
  acts.push(el("button",{class:"pill r",onclick:function(){rem("lavori",r)}},"Elimina"));
  var foot=r._p?[el("div",{class:"pfoot"},[el("span",{class:"pmu pendt"},"In attesa di rete")])]:[];
@@ -562,9 +641,13 @@ function account(app){
  var big=el("div",{class:"av",style:"width:96px;height:96px;font-size:32px;margin:12px auto"});paint(big,"id:"+ses.n,ses.n);
  var f=el("input",{type:"file",accept:"image/*",style:"display:none"});
  f.onchange=function(){if(f.files[0])setPhoto(f.files[0])};
+ var tBtns=[["auto","Sistema"],["light","☀️ Chiaro"],["dark","🌙 Scuro"]].map(function(o){
+  return el("button",{class:THEME===o[0]?"on":"",onclick:function(){applyTheme(o[0]);render()}},o[1]);
+ });
  app.append(el("div",{class:"card",style:"text-align:center"},[big,el("div",{class:"big"},ses.n),el("div",{class:"mu"},isCoach(ses.n)?"Allenatore":(admin?"Admin":"Atleta")),el("div",{style:"height:14px"}),
   el("button",{onclick:function(){f.click()}},"Cambia foto profilo"),f,el("div",{style:"height:6px"}),
   el("button",{class:"link",onclick:function(){db.collection("profili").doc("prof:"+ses.n.toLowerCase()).delete().catch(function(){})}},"Rimuovi foto")]));
+ app.append(el("div",{class:"card"},[el("div",{class:"big"},"Aspetto"),el("div",{class:"mu"},"Scegli il tema dell’app"),el("div",{class:"tseg"},tBtns)]));
  app.append(el("div",{class:"tag",style:"text-align:center;margin-top:14px"},"Versione 22 ott · pesi senza sostituzione"));
 }
 function addPerson(){
@@ -575,7 +658,7 @@ function addPerson(){
  logit("aggiunto","persone",n);
 }
 var tmr=null,ATH="",DRAFT=null,EDIT=null,FIL={};
-function toast(m){var t=document.getElementById("toast");if(!t){t=el("div",{id:"toast",class:"toast"});document.body.append(t)}t.textContent=m;t.classList.add("on");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on")},2800)}
+function toast(m,isRec){var t=document.getElementById("toast");if(!t){t=el("div",{id:"toast",class:"toast"});document.body.append(t)}t.textContent=m;t.className="toast on"+(isRec?" rec":"");clearTimeout(tmr);tmr=setTimeout(function(){t.classList.remove("on","rec")},3200)}
 function gone(){toast(navigator.onLine?"Eliminazione completata ✓":"Eliminato: si sincronizza quando torna la rete")}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
 function logit(){}
@@ -622,7 +705,7 @@ function add(k,inp){
   EDIT=null;toast("Modifica salvata ✓");render();return;
  }
  v.by=me;v.ts=Date.now();
- var id=uid(),msg="";
+ var id=uid(),msg="",isRec=false;
  if(k==="gare"&&v.gara){
   var low=lowWins(v.gara);
   if(low!==null){
@@ -630,8 +713,16 @@ function add(k,inp){
    if(ex){
     var a=num(v.ris),b=num(ex.ris),better=isNaN(a)?isNaN(b):(isNaN(b)||(low?a<b:a>b));
     if(!better){alert("Non salvato: per "+v.gara+" c’è già un risultato migliore o uguale ("+(ex.ris||"senza risultato")+").");return}
-    id=ex.id;msg="Nuovo record: risultato sostituito ✓";
-   }
+    id=ex.id;msg="🏆 Nuovo record personale!";isRec=true;
+   }else if(v.ris){msg="🏆 Primo record registrato!";isRec=true;}
+  }
+ }
+ if(k==="pesi"&&v.es&&v.kg){
+  var keyP="id:"+(v.for||me),kgNew=parseFloat(v.kg);
+  if(!isNaN(kgNew)&&kgNew>0){
+   var prevMax=0;
+   S.pesi.forEach(function(r){if(keyOf(r)===keyP&&(r.es||"").trim()===v.es){var x=parseFloat(r.kg);if(!isNaN(x)&&x>prevMax)prevMax=x}});
+   if(kgNew>prevMax){msg="🏆 Nuovo massimale "+v.es+": "+kgNew+" kg!";isRec=true;}
   }
  }
 
@@ -641,7 +732,8 @@ function add(k,inp){
   if(same.length){id=same[0].id;msg="Rincorsa sostituita ✓";same.slice(1).forEach(function(r){db.collection(k).doc(r.id).delete().catch(function(){})})}
  }
  db.collection(k).doc(id).set(v).catch(function(){});
- if(msg)toast(msg);
+ if(isRec)celebrate();
+ if(msg)toast(msg,isRec);
  logit("aggiunto",k,summary(k,v));
  F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});
  var ctl=inp.disc||inp.gara;if(ctl&&ctl.onchange)ctl.onchange();
