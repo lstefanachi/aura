@@ -85,6 +85,11 @@ button.pill.g{background:#2e7d4f}
 .toast.rec{background:linear-gradient(135deg,#d97706,#f59e0b);color:#1c1f24;font-weight:800;animation:popIn .35s ease}
 .confetti{position:fixed;top:-10px;width:9px;height:9px;border-radius:2px;pointer-events:none;z-index:50;animation:fall 1.6s linear forwards}
 @keyframes fall{to{transform:translateY(105vh) rotate(540deg);opacity:0}}
+.aura-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;margin-top:4px;letter-spacing:.02em}
+.aura-card{background:linear-gradient(135deg,var(--card),var(--ac2));border:1px solid var(--bd);border-radius:14px;padding:14px;margin:10px 0}
+.aura-bar{height:8px;background:var(--bg);border-radius:999px;overflow:hidden;margin:8px 0 4px;border:1px solid var(--bd)}
+.aura-fill{height:100%;border-radius:999px;transition:width .4s ease}
+.aura-stats{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--mu);flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -131,6 +136,60 @@ function copyText(txt){
 function fallbackCopy(txt){
  var ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";
  document.body.append(ta);ta.select();try{document.execCommand("copy");toast("Copiato negli appunti ✓")}catch(e){}ta.remove();
+}
+var AURA_LV=[
+ {min:0,max:30,name:"Novizio",ic:"🌱",bg:"#6d6a66",fg:"#fff"},
+ {min:30,max:80,name:"Promessa",ic:"⚡",bg:"#2f5fd0",fg:"#fff"},
+ {min:80,max:160,name:"Titolare",ic:"🔥",bg:"#7b3fa0",fg:"#fff"},
+ {min:160,max:300,name:"Top Aura",ic:"💎",bg:"#d97706",fg:"#1c1f24"},
+ {min:300,max:null,name:"Leggenda",ic:"👑",bg:"linear-gradient(135deg,#f59e0b,#ec4899)",fg:"#fff"}
+];
+function getAura(k){
+ // Gare: each discipline keeps only the athlete's best result (1 PB per discipline)
+ var garePB={};
+ S.gare.forEach(function(r){
+  if(keyOf(r)===k&&r.gara&&r.ris)garePB[r.gara]=r.ris;
+ });
+ var pbG=Object.keys(garePB).length;
+
+ // Pesi: count distinct exercises where the athlete has a valid PR (> 0 kg),
+ // plus bonus points for improvements (each time a higher weight was logged in that exercise)
+ var pesiByEx={};
+ S.pesi.forEach(function(r){
+  if(keyOf(r)===k&&r.es){
+   var kg=parseFloat(r.kg);
+   if(!isNaN(kg)&&kg>0){
+    var e=(r.es||"").trim();
+    if(!pesiByEx[e])pesiByEx[e]=[];
+    pesiByEx[e].push({kg:kg,ts:r.ts||0,d:r.data||""});
+   }
+  }
+ });
+ var pbP=0,impP=0;
+ Object.keys(pesiByEx).forEach(function(e){
+  var arr=pesiByEx[e].slice().sort(function(a,b){return a.d.localeCompare(b.d)||a.ts-b.ts});
+  var curMax=0;
+  arr.forEach(function(item){
+   if(item.kg>curMax){
+    if(curMax===0)pbP++;else impP++;
+    curMax=item.kg;
+   }
+  });
+ });
+
+ // Points ONLY from Personal Bests:
+ // +20 pt for each Gare PB, +15 pt for each Pesi PR exercise, +10 pt for each Pesi PR beaten
+ var pts=(pbG*20)+(pbP*15)+(impP*10);
+ var lv=AURA_LV[0],next=null;
+ for(var i=0;i<AURA_LV.length;i++){
+  if(pts>=AURA_LV[i].min){lv=AURA_LV[i];next=AURA_LV[i+1]||null}
+ }
+ var pct=next?Math.min(100,Math.round(((pts-lv.min)/(next.min-lv.min))*100)):100;
+ return {pts:pts,lv:lv,next:next,pct:pct,pbG:pbG,pbP:pbP,impP:impP};
+}
+function auraBadge(k){
+ var a=getAura(k);
+ return el("span",{class:"aura-pill",style:"background:"+a.lv.bg+";color:"+a.lv.fg},a.lv.ic+" "+a.lv.name+" · "+a.pts+" pt");
 }
 var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
@@ -268,7 +327,7 @@ function home(app){
  var g=el("div",{class:"grid"});
  sortedAt.forEach(function(x){
   var fav=isFav(x.k);
-  var btn=el("button",{class:"ath"+(x.k==="id:"+ses.n?" mine":""),onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600"},"Vedi scheda ›")]);
+  var btn=el("button",{class:"ath"+(x.k==="id:"+ses.n?" mine":""),onclick:function(){go("atleta",x.k)}},[avEl(x.k,x.n),el("div",{class:"big"},x.n),auraBadge(x.k),el("div",{class:"cnt",style:"color:var(--ac);font-weight:600;margin-top:6px"},"Vedi scheda ›")]);
   var st=el("button",{class:"star-btn"+(fav?" on":""),title:fav?"Rimuovi dai preferiti":"Fissa in alto",onclick:function(e){toggleFav(x.k,e)}},fav?"★":"☆");
   g.append(el("div",{class:"ath-wrap"},[btn,st]));
  });
@@ -279,6 +338,19 @@ function atleta(app){
  var P=people().filter(function(x){return x.k===sel})[0]||{n:""};
  app.append(el("button",{class:"link",onclick:function(){go("home")}},"← Tutti gli atleti"));
  var topc=el("div",{class:"card",style:"display:flex;align-items:center;gap:12px"},[avEl(sel,P.n),el("h2",{style:"margin:0"},P.n)]);app.append(topc);
+ var au=getAura(sel);
+ var auHead=el("div",{class:"row"},[
+  el("div",{class:"big"},au.lv.ic+" Livello Aura: "+au.lv.name),
+  el("div",{class:"big",style:"color:var(--ac)"},au.pts+" pt")
+ ]);
+ var auFill=el("div",{class:"aura-fill",style:"width:"+au.pct+"%;background:"+au.lv.bg});
+ var auSub=el("div",{class:"tag"},au.next?("Mancano "+(au.next.min-au.pts)+" pt per "+au.next.ic+" "+au.next.name+" ("+au.pct+"%)"):"Livello massimo raggiunto!");
+ var auStats=el("div",{class:"aura-stats"},[
+  el("span",{},"🏆 "+au.pbG+" PB gare (+"+(au.pbG*20)+" pt)"),
+  el("span",{},"🏋️ "+au.pbP+" PR pesi (+"+(au.pbP*15)+" pt)"),
+  au.impP?el("span",{},"📈 "+au.impP+" record battuti (+"+(au.impP*10)+" pt)"):""
+ ]);
+ app.append(el("div",{class:"aura-card"},[auHead,el("div",{class:"aura-bar"},auFill),auSub,auStats]));
  function mine(k){return S[k].filter(function(r){return keyOf(r)===sel}).sort(function(a,b){return b.ts-a.ts})}
  function head(t){app.append(el("div",{class:"sec"},t))}
  function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
@@ -644,7 +716,8 @@ function account(app){
  var tBtns=[["auto","Sistema"],["light","☀️ Chiaro"],["dark","🌙 Scuro"]].map(function(o){
   return el("button",{class:THEME===o[0]?"on":"",onclick:function(){applyTheme(o[0]);render()}},o[1]);
  });
- app.append(el("div",{class:"card",style:"text-align:center"},[big,el("div",{class:"big"},ses.n),el("div",{class:"mu"},isCoach(ses.n)?"Allenatore":(admin?"Admin":"Atleta")),el("div",{style:"height:14px"}),
+ var myAuraEl=isCoach(ses.n)?"":el("div",{style:"margin-top:6px"},auraBadge("id:"+ses.n));
+ app.append(el("div",{class:"card",style:"text-align:center"},[big,el("div",{class:"big"},ses.n),el("div",{class:"mu"},isCoach(ses.n)?"Allenatore":(admin?"Admin":"Atleta")),myAuraEl,el("div",{style:"height:14px"}),
   el("button",{onclick:function(){f.click()}},"Cambia foto profilo"),f,el("div",{style:"height:6px"}),
   el("button",{class:"link",onclick:function(){db.collection("profili").doc("prof:"+ses.n.toLowerCase()).delete().catch(function(){})}},"Rimuovi foto")]));
  app.append(el("div",{class:"card"},[el("div",{class:"big"},"Aspetto"),el("div",{class:"mu"},"Scegli il tema dell’app"),el("div",{class:"tseg"},tBtns)]));
@@ -732,7 +805,7 @@ function add(k,inp){
   if(same.length){id=same[0].id;msg="Rincorsa sostituita ✓";same.slice(1).forEach(function(r){db.collection(k).doc(r.id).delete().catch(function(){})})}
  }
  db.collection(k).doc(id).set(v).catch(function(){});
- if(isRec)celebrate();
+ if(isRec){celebrate();msg+=" (+Aura!)"}
  if(msg)toast(msg,isRec);
  logit("aggiunto",k,summary(k,v));
  F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});
