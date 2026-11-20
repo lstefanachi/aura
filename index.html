@@ -138,11 +138,14 @@ function fallbackCopy(txt){
  document.body.append(ta);ta.select();try{document.execCommand("copy");toast("Copiato negli appunti ✓")}catch(e){}ta.remove();
 }
 var AURA_LV=[
- {min:0,max:30,name:"Novizio",ic:"🌱",bg:"#6d6a66",fg:"#fff"},
- {min:30,max:80,name:"Promessa",ic:"⚡",bg:"#2f5fd0",fg:"#fff"},
- {min:80,max:160,name:"Titolare",ic:"🔥",bg:"#7b3fa0",fg:"#fff"},
- {min:160,max:300,name:"Top Aura",ic:"💎",bg:"#d97706",fg:"#1c1f24"},
- {min:300,max:null,name:"Leggenda",ic:"👑",bg:"linear-gradient(135deg,#f59e0b,#ec4899)",fg:"#fff"}
+ {min:0,max:51,name:"No Aura",ic:"🌑",bg:"#6d6a66",fg:"#fff"},
+ {min:51,max:251,name:"Bronzo",ic:"🥉",bg:"#a97142",fg:"#fff"},
+ {min:251,max:601,name:"Argento",ic:"🥈",bg:"#8e9aab",fg:"#1c1f24"},
+ {min:601,max:1201,name:"Oro",ic:"🥇",bg:"#e6a817",fg:"#1c1f24"},
+ {min:1201,max:2001,name:"Platino",ic:"💠",bg:"#2f5fd0",fg:"#fff"},
+ {min:2001,max:3201,name:"Leggenda",ic:"🔥",bg:"#7b3fa0",fg:"#fff"},
+ {min:3201,max:5000,name:"Top Aura",ic:"💎",bg:"linear-gradient(135deg,#d97706,#ec4899)",fg:"#fff"},
+ {min:5000,max:null,name:"Aura Infinita",ic:"♾️",bg:"linear-gradient(135deg,#f59e0b,#8b5cf6,#ec4899)",fg:"#fff"}
 ];
 function getAura(k){
  // Gare: each discipline keeps only the athlete's best result (1 PB per discipline)
