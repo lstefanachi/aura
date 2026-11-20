@@ -354,7 +354,7 @@ function atleta(app){
   au.impP?el("span",{},"📈 "+au.impP+" record battuti (+"+(au.impP*10)+" pt)"):""
  ]);
  app.append(el("div",{class:"aura-card"},[auHead,el("div",{class:"aura-bar"},auFill),auSub,auStats]));
- function mine(k){return S[k].filter(function(r){return keyOf(r)===sel}).sort(function(a,b){return b.ts-a.ts})}
+ function mine(k){return S[k].filter(function(r){return keyOf(r)===sel}).sort(function(a,b){return (b.data||"").localeCompare(a.data||"")||(b.ts||0)-(a.ts||0)})}
  function head(t){app.append(el("div",{class:"sec"},t))}
  function none(){app.append(el("div",{class:"mu"},"Nessun dato."))}
  function items(k,rows){rows.forEach(function(x){app.append(el("div",{class:"card"},[el("div",{style:"white-space:pre-line"},summary(k,x)),el("div",{class:"tag"},when(x.ts))]))})}
@@ -466,13 +466,13 @@ function section(app,k){
    return true;
   });
   rows.sort(function(x,y){
-   if(FL.c<0)return y.ts-x.ts;
+   if(FL.c<0)return (y.data||"").localeCompare(x.data||"")||(y.ts||0)-(x.ts||0);
    var c=C[FL.c],p=c[3]?c[3](x):c[1](x),q=c[3]?c[3](y):c[1](y);
    return ((typeof p==="number"&&typeof q==="number")?p-q:String(p).localeCompare(String(q),"it",{numeric:true}))*FL.d;
   });
   tbl.append(el("div",{class:"tag",style:"margin:8px 0 6px"},rows.length+" di "+all.length+" righe"));
   if(!rows.length){tbl.append(el("div",{class:"mu"},all.length?"Nessun dato con questi filtri.":"Nessun dato inserito."));return}
-  if(k==="pesi"){drawPesi(rows,tbl);return}
+
   if(k==="rincorse"){drawRinc(rows,tbl);return}
   var th=el("tr",{});
   C.forEach(function(c,i){th.append(el("th",{onclick:function(){if(FL.c===i)FL.d=-FL.d;else{FL.c=i;FL.d=1}draw()}},c[0]+(FL.c===i?(FL.d>0?" ▲":" ▼"):"")))});
@@ -750,7 +750,7 @@ function lowWins(g){
 function fmtD(d){return d?String(d).split("-").reverse().join("/"):""}
 var COLS={
  gare:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Gara",function(r){return r.gara||""},"s"],["Attrezzo",function(r){return r.kg?r.kg+" kg":(r.gr?r.gr+" g":"")}],["Risultato",function(r){return r.ris||""}],["Note",function(r){return r.note||""}]],
- pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return r.kg||""},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Note",function(r){return r.note||""}]],
+ pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return isBestPeso(r)?el("span",{},[r.kg||"",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"")},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Note",function(r){return r.note||""}]],
  rincorse:[["Atleta",function(r){return nm(r)},"a"],["Disciplina",function(r){return r.disc||""},"s"],["Piedi",function(r){return r.passi2?r.passi+" / "+r.passi2:(r.passi||"")}],["Passi",function(r){return r.np||""}],["Note",function(r){return r.note||""}],["Inserita",function(r){return new Date(r.ts).toLocaleDateString("it-IT")},"",function(r){return r.ts}]]
 };
 F.lavori={t:"Lavori",ic:"🛠️",f:[["rip","Ripetute","text"],["nrip","Numero ripetute","number"],["rec","Recupero","text"],["data","Data","date"]]};
