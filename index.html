@@ -107,14 +107,32 @@ function applyTheme(t){
  else document.documentElement.removeAttribute("data-theme");
 }
 applyTheme(THEME);
-var FAVS=[];
-try{FAVS=JSON.parse(localStorage.getItem("atl_favs")||"[]")}catch(e){}
-function isFav(k){return FAVS.indexOf(k)>=0}
+function userFavKey(){
+ return ses&&ses.n?("fav:"+ses.n.toLowerCase()):"";
+}
+function getFavs(){
+ if(!ses||!ses.n)return [];
+ var fk=userFavKey();
+ var rec=(S.preferiti||[]).filter(function(r){return r.id===fk})[0];
+ if(rec&&Array.isArray(rec.favs))return rec.favs.slice();
+ try{
+  var loc=JSON.parse(localStorage.getItem("atl_"+fk)||"null");
+  if(Array.isArray(loc))return loc;
+ }catch(e){}
+ return [];
+}
+function isFav(k){return getFavs().indexOf(k)>=0}
 function toggleFav(k,ev){
  if(ev)ev.stopPropagation();
- var i=FAVS.indexOf(k);
- if(i>=0)FAVS.splice(i,1);else FAVS.push(k);
- try{localStorage.setItem("atl_favs",JSON.stringify(FAVS))}catch(e){}
+ if(!ses||!ses.n)return;
+ var fk=userFavKey();
+ var list=getFavs();
+ var i=list.indexOf(k);
+ if(i>=0)list.splice(i,1);else list.push(k);
+ try{localStorage.setItem("atl_"+fk,JSON.stringify(list))}catch(e){}
+ if(db){
+  db.collection("preferiti").doc(fk).set({k:"id:"+ses.n,favs:list,ts:Date.now()}).catch(function(){});
+ }
  render();
 }
 function celebrate(){
@@ -194,10 +212,24 @@ function auraBadge(k){
  var a=getAura(k);
  return el("span",{class:"aura-pill",style:"background:"+a.lv.bg+";color:"+a.lv.fg},a.lv.ic+" "+a.lv.name+" · "+a.pts+" pt");
 }
-var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
+var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[],preferiti:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
 async function sha(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atl|"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
-function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM||isCoach(n))}
+function migrateLegacyFavs(){
+ if(!ses||!ses.n||!db)return;
+ var fk=userFavKey();
+ var hasCloud=(S.preferiti||[]).some(function(r){return r.id===fk});
+ if(hasCloud)return;
+ try{
+  var leg=JSON.parse(localStorage.getItem("atl_favs")||"null");
+  if(Array.isArray(leg)&&leg.length){
+   localStorage.setItem("atl_"+fk,JSON.stringify(leg));
+   localStorage.removeItem("atl_favs");
+   db.collection("preferiti").doc(fk).set({k:"id:"+ses.n,favs:leg,ts:Date.now()}).catch(function(){});
+  }
+ }catch(e){}
+}
+function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM||isCoach(n));migrateLegacyFavs()}
 function fmt(s){return s.trim().replace(/\s+/g," ").split(" ").map(function(w){return w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()}).join(" ")}
 var COACHES=["Chiara Genero","Marco Negro"],ATHLETES=["Luca Stefanachi"],PW_A="1234",PW_C="atlalba",LG={s:"",t:""};
 function isCoach(n){var x=fmt(n).toLowerCase();return COACHES.some(function(c){return c.toLowerCase()===x})}
@@ -229,7 +261,7 @@ function login(app){
   el("button",{onclick:async function(){var m=await doLogin(cur(),pw.value);if(m)er.textContent=m;else{view="home";render()}}},"Entra")]));
 }
 var URL_="https://hsjkjchiuaajigdrayzj.supabase.co",KEY_="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzamtqY2hpdWFhamlnZHJheXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjI1OTEsImV4cCI6MjEwODAzODU5MX0.B19bjKOel8K0x0m65oultucFOEi78kd_BLVtVhrh7Dc";
-var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]},Q=[],subs={};
+var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[],preferiti:[]},Q=[],subs={};
 try{Q=JSON.parse(localStorage.getItem("atl_q")||"[]")}catch(e){}
 function saveQ(){try{localStorage.setItem("atl_q",JSON.stringify(Q))}catch(e){}}
 function notify(c){
@@ -240,7 +272,7 @@ function notify(c){
 }
 async function pull(){
  var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");q=q.neq("coll","foto");var r=await q;if(r.error)return;
- var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]};
+ var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[],preferiti:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
  if(nl)n.log=cache.log;
@@ -1046,7 +1078,7 @@ async function init(){
  try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync)}catch(e){db=null}
  try{var sv=JSON.parse(localStorage.getItem("atl_ses")||"null");if(sv&&sv.n&&(sv.h===H_ALL||sv.h===H_ADM))setSes(sv.n,sv.h)}catch(e){}
  if(!db){render();return}
- ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori","pesi_cfg"]).forEach(function(k){
+ ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori","pesi_cfg","preferiti"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
    loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(!EDIT&&t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
