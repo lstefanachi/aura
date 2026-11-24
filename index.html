@@ -505,7 +505,7 @@ function renderLucaPesiManager(app){
    flBox.append(el("div",{class:"row",style:"padding:6px 8px;background:var(--bg);border-radius:8px;margin-top:6px;align-items:center"},[
     el("span",{},[el("strong",{},cf.label),el("span",{class:"tag"}," ("+(cf.type==="number"?"Numero":"Testo")+(cf.req?", obbl.":"")+")")]),
     el("button",{class:"del",onclick:function(){
-     if(!confirm("Rimuovere il campo ""+cf.label+"" da "+LUCA_SEL_EX+"?"))return;
+     if(!confirm("Rimuovere il campo “"+cf.label+"” da "+LUCA_SEL_EX+"?"))return;
      var nextF=curFields.filter(function(_,i){return i!==idx});
      if(nextF.length===0&&baseEs.indexOf(curCfg.nome)>=0){
       db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
@@ -547,10 +547,10 @@ function renderLucaPesiManager(app){
  // Allow deleting custom exercise if it's not a base exercise
  if(curCfg&&baseEs.indexOf(curCfg.nome)<0){
   wrap.append(el("div",{style:"margin-top:10px;text-align:right"},el("button",{class:"del",onclick:function(){
-   if(!confirm("Eliminare l’esercizio personalizzato ""+curCfg.nome+""?"))return;
+   if(!confirm("Eliminare l’esercizio personalizzato “"+curCfg.nome+"”?"))return;
    db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
    LUCA_SEL_EX="";toast("Esercizio eliminato ✓");
-  }},"Elimina esercizio ""+curCfg.nome+""")));
+  }},"Elimina esercizio “"+curCfg.nome+"”")));
  }
  app.append(wrap);
 }
