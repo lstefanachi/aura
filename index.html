@@ -155,14 +155,14 @@ function getAura(k){
  });
  var pbG=Object.keys(garePB).length;
 
- // Pesi: count distinct exercises where the athlete has a valid PR (> 0 kg),
- // plus bonus points for improvements (each time a higher weight was logged in that exercise)
+ // Pesi: count distinct exercises/variants (e.g. Panca with different degrees) where the athlete has a valid PR (> 0 kg),
+ // plus bonus points for improvements (each time a higher weight was logged in that exercise/variant)
  var pesiByEx={};
  S.pesi.forEach(function(r){
   if(keyOf(r)===k&&r.es){
    var kg=parseFloat(r.kg);
    if(!isNaN(kg)&&kg>0){
-    var e=(r.es||"").trim();
+    var e=pesoExKey(r);
     if(!pesiByEx[e])pesiByEx[e]=[];
     pesiByEx[e].push({kg:kg,ts:r.ts||0,d:r.data||""});
    }
@@ -363,9 +363,9 @@ function atleta(app){
  if(g.length)items("gare",g);else none();
  head("🏋️ Pesi");
  if(p.length){
-  var best={};p.forEach(function(x){var e=(x.es||"?").trim(),kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[e]||kg>best[e]))best[e]=kg});
+  var best={},bestLbl={};p.forEach(function(x){var kEx=pesoExKey(x)||"?",lbl=pesoExLabel(x)||"?",kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[kEx]||kg>best[kEx])){best[kEx]=kg;bestLbl[kEx]=lbl}});
   var c=el("div",{class:"card"},el("div",{class:"tag"},"Record"));
-  Object.keys(best).forEach(function(e){c.append(el("div",{class:"row"},[el("span",{},e),el("span",{class:"big"},best[e]+" kg")]))});
+  Object.keys(best).forEach(function(kEx){c.append(el("div",{class:"row"},[el("span",{},bestLbl[kEx]),el("span",{class:"big"},best[kEx]+" kg")]))});
   app.append(c);items("pesi",p);
  }else none();
  head("📏 Rincorse");
@@ -396,8 +396,8 @@ function recCard(k,r,fields){
 }
 function isBestPeso(r){
  var kg=parseFloat(r.kg);if(isNaN(kg)||kg<=0)return false;
- var key=keyOf(r),es=(r.es||"").trim(),max=0;
- S.pesi.forEach(function(x){if(keyOf(x)===key&&(x.es||"").trim()===es){var v=parseFloat(x.kg);if(!isNaN(v)&&v>max)max=v}});
+ var key=keyOf(r),exK=pesoExKey(r),max=0;
+ S.pesi.forEach(function(x){if(keyOf(x)===key&&pesoExKey(x)===exK){var v=parseFloat(x.kg);if(!isNaN(v)&&v>max)max=v}});
  return kg>=max&&max>0;
 }
 function pesoCard(r){
@@ -439,21 +439,44 @@ function getPesiExtraFieldsFor(exName){
  var c=getLucaPesiCfg().filter(function(x){return (x.nome||"").trim().toLowerCase()===e})[0];
  return (c&&Array.isArray(c.fields))?c.fields:[];
 }
+function isZeroGradiField(exName,label,rawVal){
+ var ex=(exName||"").trim().toLowerCase();
+ var lb=(label||"").trim().toLowerCase();
+ if(ex.indexOf("panca")!==0||lb.indexOf("grad")<0)return false;
+ var s=String(rawVal||"").trim().replace(/°/g,"").replace(/gradi?/gi,"").replace(",",".").trim();
+ if(!s)return true;
+ var n=parseFloat(s);
+ return !isNaN(n)&&n===0;
+}
 function formatPesiCustom(r){
  var out=[],seen={};
  getPesiExtraFieldsFor(r.es).forEach(function(cf){
   if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!==""){
-   out.push(cf.label+": "+r[cf.key]);seen[cf.key]=1;
+   if(!isZeroGradiField(r.es,cf.label,r[cf.key])){
+    out.push(cf.label+": "+String(r[cf.key]).trim());
+   }
+   seen[cf.key]=1;
   }
  });
  if(r._cflabels){
-  Object.keys(r._cflabels).forEach(function(k){
+  Object.keys(r._cflabels).sort().forEach(function(k){
    if(!seen[k]&&r[k]!==undefined&&String(r[k]).trim()!==""){
-    out.push(r._cflabels[k]+": "+r[k]);
+    if(!isZeroGradiField(r.es,r._cflabels[k],r[k])){
+     out.push(r._cflabels[k]+": "+String(r[k]).trim());
+    }
    }
   });
  }
  return out.join(" · ");
+}
+function pesoExLabel(r){
+ var e=(r.es||"").trim();if(!e)return "";
+ if(e.toLowerCase()==="panca piana")e="Panca";
+ var cx=formatPesiCustom(r);
+ return cx?(e+" ("+cx+")"):e;
+}
+function pesoExKey(r){
+ return pesoExLabel(r).toLowerCase();
 }
 function renderLucaPesiManager(app){
  if(!isLuca())return;
@@ -626,14 +649,27 @@ function section(app,k){
  function uniq(fn){var m={};all.forEach(function(r){var v=fn(r);if(v)m[v]=1});return Object.keys(m).sort(function(x,y){return x.localeCompare(y,"it")})}
  var fa=el("select",{}),fs=el("select",{}),fq=el("input",{type:"search",placeholder:"Cerca in tutta la tabella…",style:"margin-top:8px"});
  fa.append(el("option",{value:""},"Tutti gli atleti"));uniq(nm).forEach(function(v){fa.append(el("option",{value:v},v))});
- fs.append(el("option",{value:""},SPL[k]));uniq(C[si][1]).forEach(function(v){fs.append(el("option",{value:v},v))});
+ fs.append(el("option",{value:""},SPL[k]));
+ var sOpts={};
+ uniq(C[si][1]).forEach(function(v){sOpts[v]=1});
+ if(k==="pesi"){
+  all.forEach(function(r){var vl=pesoExLabel(r);if(vl)sOpts[vl]=1});
+  if(isLuca()||admin){
+   getLucaPesiCfg().forEach(function(c){if(c.nome)sOpts[c.nome.trim()]=1});
+  }
+ }
+ Object.keys(sOpts).sort(function(x,y){return x.localeCompare(y,"it")}).forEach(function(v){fs.append(el("option",{value:v},v))});
  if((k==="pesi"||k==="rincorse"||k==="gare")&&!admin){FL.a="";fs.style.gridColumn="1 / -1"}
  fa.value=FL.a;FL.a=fa.value;fs.value=FL.s;FL.s=fs.value;fq.value=FL.q;
  function draw(){
   tbl.replaceChildren();
   var rows=all.filter(function(r){
    if(FL.a&&nm(r)!==FL.a)return false;
-   if(FL.s&&C[si][1](r)!==FL.s)return false;
+   if(FL.s){
+    if(k==="pesi"){
+     if(pesoExLabel(r)!==FL.s&&(r.es||"").trim()!==FL.s)return false;
+    }else if(C[si][1](r)!==FL.s)return false;
+   }
    if(FL.q&&C.map(function(c){return c[1](r)}).join(" ").toLowerCase().indexOf(FL.q.toLowerCase())<0)return false;
    return true;
   });
@@ -951,7 +987,7 @@ function add(k,inp){
    var elIn=inp._custom[cf.key];
    var val=elIn?elIn.value.trim():"";
    if(cf.req&&!val)mi.push(cf.label);
-   if(val){v[cf.key]=val;cfl[cf.key]=cf.label}
+   if(val&&!isZeroGradiField(v.es,cf.label,val)){v[cf.key]=val;cfl[cf.key]=cf.label}
   });
   if(Object.keys(cfl).length)v._cflabels=cfl;
  }
@@ -977,11 +1013,11 @@ function add(k,inp){
   }
  }
  if(k==="pesi"&&v.es&&v.kg){
-  var keyP="id:"+(v.for||me),kgNew=parseFloat(v.kg);
+  var keyP="id:"+(v.for||me),kgNew=parseFloat(v.kg),exNewK=pesoExKey(v),exNewLbl=pesoExLabel(v);
   if(!isNaN(kgNew)&&kgNew>0){
    var prevMax=0;
-   S.pesi.forEach(function(r){if(keyOf(r)===keyP&&(r.es||"").trim()===v.es){var x=parseFloat(r.kg);if(!isNaN(x)&&x>prevMax)prevMax=x}});
-   if(kgNew>prevMax){msg="🏆 Nuovo massimale "+v.es+": "+kgNew+" kg!";isRec=true;}
+   S.pesi.forEach(function(r){if(keyOf(r)===keyP&&pesoExKey(r)===exNewK){var x=parseFloat(r.kg);if(!isNaN(x)&&x>prevMax)prevMax=x}});
+   if(kgNew>prevMax){msg="🏆 Nuovo massimale "+exNewLbl+": "+kgNew+" kg!";isRec=true;}
   }
  }
 
