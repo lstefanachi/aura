@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Atletica Alba</title>
+<meta name="theme-color" content="#7b3fa0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atletica Alba">
+<link id="app-icon" rel="icon" type="image/png">
+<link id="apple-icon" rel="apple-touch-icon">
+<link id="app-manifest" rel="manifest">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);--bg:#f5f1ea;--card:#fff;--tx:#1c1f24;--mu:#6d6a66;--ac:#7b3fa0;--ac2:#efe3f6;--bd:#e6dfd4;--er:#b3261e;--nav:#1c1f24}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#15171a;--card:#202327;--tx:#eceae6;--mu:#a09c96;--ac:#a56bdb;--ac2:#2d1f3a;--bd:#32353a;--er:#f2b8b5;--nav:#0d0e10}}
@@ -91,6 +99,57 @@ button.pill.g{background:#2e7d4f}
 .aura-fill{height:100%;border-radius:999px;transition:width .4s ease}
 .aura-stats{display:flex;gap:12px;margin-top:8px;font-size:12px;color:var(--mu);flex-wrap:wrap}
 </style>
+<script>
+(function(){
+ function makeIcon(sz){
+  var c=document.createElement("canvas");c.width=c.height=sz;
+  var x=c.getContext("2d"),r=Math.round(sz*0.22);
+  x.beginPath();
+  x.moveTo(r,0);x.lineTo(sz-r,0);x.quadraticCurveTo(sz,0,sz,r);
+  x.lineTo(sz,sz-r);x.quadraticCurveTo(sz,sz,sz-r,sz);
+  x.lineTo(r,sz);x.quadraticCurveTo(0,sz,0,sz-r);
+  x.lineTo(0,r);x.quadraticCurveTo(0,0,r,0);
+  x.closePath();x.clip();
+  // Signature Atletica Alba purple & white track stripes background
+  x.fillStyle="#7b3fa0";x.fillRect(0,0,sz,sz);
+  x.fillStyle="rgba(255,255,255,0.92)";
+  var step=Math.round(sz*0.18),lw=Math.max(2,Math.round(sz*0.022));
+  for(var y=step;y<sz;y+=step){x.fillRect(0,y,sz,lw)}
+  var g=x.createLinearGradient(0,0,0,sz);
+  g.addColorStop(0,"rgba(0,0,0,0.08)");g.addColorStop(1,"rgba(0,0,0,0.48)");
+  x.fillStyle=g;x.fillRect(0,0,sz,sz);
+  // Central dark badge for crisp contrast
+  x.fillStyle="rgba(28,31,36,0.78)";
+  x.beginPath();x.arc(sz/2,sz/2,sz*0.34,0,Math.PI*2);x.fill();
+  x.strokeStyle="#f5a623";x.lineWidth=Math.max(2,Math.round(sz*0.025));x.stroke();
+  // Bold italic AA monogram
+  x.fillStyle="#ffffff";
+  x.font="italic 900 "+Math.round(sz*0.31)+"px 'Arial Black', Impact, sans-serif";
+  x.textAlign="center";x.textBaseline="middle";
+  x.fillText("AA",sz/2-sz*0.015,sz/2+sz*0.02);
+  return c.toDataURL("image/png");
+ }
+ try{
+  var i192=makeIcon(192),i512=makeIcon(512);
+  var l1=document.getElementById("app-icon");if(l1)l1.href=i192;
+  var l2=document.getElementById("apple-icon");if(l2)l2.href=i192;
+  var mf={
+   name:"Atletica Alba",
+   short_name:"Atletica Alba",
+   start_url:location.href,
+   display:"standalone",
+   background_color:"#7b3fa0",
+   theme_color:"#7b3fa0",
+   icons:[
+    {src:i192,sizes:"192x192",type:"image/png",purpose:"any maskable"},
+    {src:i512,sizes:"512x512",type:"image/png",purpose:"any maskable"}
+   ]
+  };
+  var blob=new Blob([JSON.stringify(mf)],{type:"application/manifest+json"});
+  var l3=document.getElementById("app-manifest");if(l3)l3.href=URL.createObjectURL(blob);
+ }catch(e){}
+})();
+</script>
 </head>
 <body>
 <div class="hero"><div class="ht"><h1 id="ttl">Atletica Alba</h1><p id="sub">Avrai aura?</p></div><div id="top" class="top" style="display:none"><button id="me" class="me"></button><button id="out" class="outb">Esci</button></div></div>
