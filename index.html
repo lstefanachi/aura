@@ -194,7 +194,7 @@ function auraBadge(k){
  var a=getAura(k);
  return el("span",{class:"aura-pill",style:"background:"+a.lv.bg+";color:"+a.lv.fg},a.lv.ic+" "+a.lv.name+" · "+a.pts+" pt");
 }
-var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
+var S={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]},names={},db=null,me=null,view="home",user=null,admin=false,sel=null,ses=null;
 var H_ALL="40945be59f1ad448aefb3bb8096115ff0f58c0a942de446c0d485bf84b91aafb",H_ADM="54931b995125a5edd165d1ce02eadacb44b3f05dac0b2ceae0fbbfa5807dcc6c";
 async function sha(s){var b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atl|"+s));return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,"0")}).join("")}
 function setSes(n,h){ses={n:n,h:h};me=n;admin=(h===H_ADM||isCoach(n))}
@@ -229,7 +229,7 @@ function login(app){
   el("button",{onclick:async function(){var m=await doLogin(cur(),pw.value);if(m)er.textContent=m;else{view="home";render()}}},"Entra")]));
 }
 var URL_="https://hsjkjchiuaajigdrayzj.supabase.co",KEY_="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhzamtqY2hpdWFhamlnZHJheXpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0NjI1OTEsImV4cCI6MjEwODAzODU5MX0.B19bjKOel8K0x0m65oultucFOEi78kd_BLVtVhrh7Dc";
-var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[]},Q=[],subs={};
+var SB=null,cache={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]},Q=[],subs={};
 try{Q=JSON.parse(localStorage.getItem("atl_q")||"[]")}catch(e){}
 function saveQ(){try{localStorage.setItem("atl_q",JSON.stringify(Q))}catch(e){}}
 function notify(c){
@@ -240,7 +240,7 @@ function notify(c){
 }
 async function pull(){
  var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");q=q.neq("coll","foto");var r=await q;if(r.error)return;
- var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[]};
+ var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
  if(nl)n.log=cache.log;
@@ -284,7 +284,7 @@ function rincLines(r){
  if(r.note)L.push("Note: "+r.note);
  return L.filter(Boolean).join("\n");
 }
-function summary(k,v){if(k==="rincorse")return rincLines(v);return F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean).join(" · ")}
+function summary(k,v){if(k==="rincorse")return rincLines(v);var base=F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean);if(k==="pesi"){var cx=formatPesiCustom(v);if(cx)base.push(cx)}return base.join(" · ")}
 function go(v,s){view=v;sel=s||null;EDIT=null;LS=null;render();window.scrollTo(0,0)}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
@@ -429,22 +429,194 @@ function drawPesi(rows,box){
   g.forEach(function(r){box.append(pesoCard(r))});
  });
 }
+var LUCA_CFG_OPEN=false,LUCA_SEL_EX="";
+function isLuca(){return !!(ses&&fmt(ses.n).toLowerCase()==="luca stefanachi")}
+function getLucaPesiCfg(){
+ return (S.pesi_cfg||[]).slice().sort(function(a,b){return (a.ts||0)-(b.ts||0)});
+}
+function getPesiExtraFieldsFor(exName){
+ var e=(exName||"").trim().toLowerCase();if(!e)return [];
+ var c=getLucaPesiCfg().filter(function(x){return (x.nome||"").trim().toLowerCase()===e})[0];
+ return (c&&Array.isArray(c.fields))?c.fields:[];
+}
+function formatPesiCustom(r){
+ var out=[],seen={};
+ getPesiExtraFieldsFor(r.es).forEach(function(cf){
+  if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!==""){
+   out.push(cf.label+": "+r[cf.key]);seen[cf.key]=1;
+  }
+ });
+ if(r._cflabels){
+  Object.keys(r._cflabels).forEach(function(k){
+   if(!seen[k]&&r[k]!==undefined&&String(r[k]).trim()!==""){
+    out.push(r._cflabels[k]+": "+r[k]);
+   }
+  });
+ }
+ return out.join(" · ");
+}
+function renderLucaPesiManager(app){
+ if(!isLuca())return;
+ var wrap=el("div",{class:"card",style:"border-color:var(--ac)"});
+ var hdr=el("div",{class:"row",style:"align-items:center"},[
+  el("div",{class:"big"},"⚙️ Esercizi e campi personalizzati"),
+  el("button",{class:"pill b",onclick:function(){LUCA_CFG_OPEN=!LUCA_CFG_OPEN;render()}},LUCA_CFG_OPEN?"Chiudi":"Gestisci")
+ ]);
+ wrap.append(hdr);
+ if(!LUCA_CFG_OPEN){
+  var cnt=getLucaPesiCfg().length;
+  wrap.append(el("div",{class:"mu",style:"margin-top:4px"},cnt?(cnt+" eserciz"+(cnt===1?"io personalizzato":"i personalizzati")+" configurat"+(cnt===1?"o":"i")):"Aggiungi nuovi esercizi o campi specifici solo per un esercizio."));
+  app.append(wrap);return;
+ }
+ var cfgs=getLucaPesiCfg();
+ var baseEs=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
+ // Add new exercise box
+ var newExInp=el("input",{type:"text",placeholder:"Es. Hip Thrust, Affondi, Box Jump…"});
+ var addExBtn=el("button",{style:"margin-top:8px",onclick:function(){
+  var nmEx=newExInp.value.trim();
+  if(!nmEx){alert("Scrivi il nome dell’esercizio.");return}
+  var allNames=baseEs.concat(cfgs.map(function(c){return c.nome}));
+  if(allNames.some(function(x){return x.toLowerCase()===nmEx.toLowerCase()})){
+   alert("Questo esercizio esiste già.");return;
+  }
+  var id="pcfg-"+uid();
+  db.collection("pesi_cfg").doc(id).set({nome:nmEx,fields:[],owner:me,ts:Date.now()}).catch(function(){});
+  LUCA_SEL_EX=nmEx;newExInp.value="";toast("Esercizio aggiunto ✓");
+ }},"＋ Aggiungi esercizio");
+ wrap.append(el("label",{},"Nuovo esercizio per i pesi"),newExInp,addExBtn);
+
+ // Select exercise to configure custom fields (can be any base exercise OR custom exercise!)
+ var allExList=baseEs.concat(cfgs.map(function(c){return c.nome}).filter(function(n){return baseEs.indexOf(n)<0}));
+ if(!LUCA_SEL_EX&&allExList.length)LUCA_SEL_EX=cfgs.length?cfgs[0].nome:allExList[0];
+ var selEx=el("select",{});
+ allExList.forEach(function(n){
+  var isCust=cfgs.some(function(c){return c.nome.toLowerCase()===n.toLowerCase()});
+  selEx.append(el("option",{value:n},n+(isCust?" ★":"")));
+ });
+ selEx.value=LUCA_SEL_EX;
+ selEx.onchange=function(){LUCA_SEL_EX=selEx.value;render()};
+ wrap.append(el("div",{style:"border-top:1px solid var(--bd);margin:14px 0 6px"}),el("label",{},"Aggiungi o gestisci campi per l’esercizio:"),selEx);
+
+ var curCfg=cfgs.filter(function(c){return (c.nome||"").toLowerCase()===LUCA_SEL_EX.toLowerCase()})[0];
+ var curFields=(curCfg&&curCfg.fields)||[];
+ if(curFields.length){
+  var flBox=el("div",{style:"margin-top:8px"});
+  curFields.forEach(function(cf,idx){
+   flBox.append(el("div",{class:"row",style:"padding:6px 8px;background:var(--bg);border-radius:8px;margin-top:6px;align-items:center"},[
+    el("span",{},[el("strong",{},cf.label),el("span",{class:"tag"}," ("+(cf.type==="number"?"Numero":"Testo")+(cf.req?", obbl.":"")+")")]),
+    el("button",{class:"del",onclick:function(){
+     if(!confirm("Rimuovere il campo ""+cf.label+"" da "+LUCA_SEL_EX+"?"))return;
+     var nextF=curFields.filter(function(_,i){return i!==idx});
+     if(nextF.length===0&&baseEs.indexOf(curCfg.nome)>=0){
+      db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
+     }else{
+      db.collection("pesi_cfg").doc(curCfg.id).set({nome:curCfg.nome,fields:nextF,owner:curCfg.owner||me,ts:curCfg.ts||Date.now()}).catch(function(){});
+     }
+     toast("Campo rimosso ✓");
+    }},"Elimina")
+   ]));
+  });
+  wrap.append(flBox);
+ }else{
+  wrap.append(el("div",{class:"mu",style:"margin-top:6px"},"Nessun campo extra per "+LUCA_SEL_EX+"."));
+ }
+
+ var fName=el("input",{type:"text",placeholder:"Nome campo (es. Recupero, Altezza cm, Lato…)"});
+ var fType=el("select",{style:"margin-top:6px"},[
+  el("option",{value:"text"},"Tipo: Testo"),
+  el("option",{value:"number"},"Tipo: Numero")
+ ]);
+ var fReq=el("select",{style:"margin-top:6px"},[
+  el("option",{value:"0"},"Facoltativo"),
+  el("option",{value:"1"},"Obbligatorio")
+ ]);
+ var addFieldBtn=el("button",{class:"sec2",style:"margin-top:8px",onclick:function(){
+  var lbl=fName.value.trim();
+  if(!lbl){alert("Scrivi il nome del campo.");return}
+  if(curFields.some(function(x){return x.label.toLowerCase()===lbl.toLowerCase()})){
+   alert("Esiste già un campo con questo nome per "+LUCA_SEL_EX+".");return;
+  }
+  var nf={key:"cf_"+uid(),label:lbl,type:fType.value,req:fReq.value==="1"};
+  var nextF=curFields.concat([nf]);
+  var docId=curCfg?curCfg.id:("pcfg-"+uid());
+  db.collection("pesi_cfg").doc(docId).set({nome:curCfg?curCfg.nome:LUCA_SEL_EX,fields:nextF,owner:me,ts:curCfg?curCfg.ts:Date.now()}).catch(function(){});
+  fName.value="";toast("Campo aggiunto a "+LUCA_SEL_EX+" ✓");
+ }},"＋ Aggiungi campo solo per "+LUCA_SEL_EX);
+ wrap.append(el("label",{},"Nuovo campo solo per "+LUCA_SEL_EX),fName,fType,fReq,addFieldBtn);
+
+ // Allow deleting custom exercise if it's not a base exercise
+ if(curCfg&&baseEs.indexOf(curCfg.nome)<0){
+  wrap.append(el("div",{style:"margin-top:10px;text-align:right"},el("button",{class:"del",onclick:function(){
+   if(!confirm("Eliminare l’esercizio personalizzato ""+curCfg.nome+""?"))return;
+   db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
+   LUCA_SEL_EX="";toast("Esercizio eliminato ✓");
+  }},"Elimina esercizio ""+curCfg.nome+""")));
+ }
+ app.append(wrap);
+}
 function section(app,k){
- var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={};
- if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value};inp._a=sa;form.append(el("label",{},"Atleta *"),sa)}
- F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},f[0]==="es"?"Scegli l’esercizio…":"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
-  var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
-  tg.append(w)});
- var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi";if(inp.ris&&inp.gara)inp.ris.placeholder=hint(inp.gara.value)||"Il tuo risultato migliore"};
- if(inp.ris&&inp.gara)inp.ris.placeholder="Il tuo risultato migliore";
+ if(k==="pesi")renderLucaPesiManager(app);
+ var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={},customBox=el("div",{}),customInp={};
+ inp._custom=customInp;
  var er=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
  if(EDIT&&!er)EDIT=null;
+ function targetIsLuca(){
+  if(isLuca())return true;
+  if(admin){
+   var aVal=inp._a?inp._a.value:(er?(er.for||er.by||""):ATH);
+   return fmt(aVal).toLowerCase()==="luca stefanachi";
+  }
+  return false;
+ }
+ function fillEsOptions(){
+  if(k!=="pesi"||!inp.es)return;
+  var prev=inp.es.value;
+  inp.es.replaceChildren();
+  inp.es.append(el("option",{value:""},"Scegli l’esercizio…"));
+  var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3].slice();
+  if(targetIsLuca()){
+   getLucaPesiCfg().forEach(function(c){
+    if(c.nome&&!base.some(function(b){return b.toLowerCase()===c.nome.toLowerCase()}))base.push(c.nome);
+   });
+  }
+  base.forEach(function(o){inp.es.append(el("option",{value:o},o))});
+  if(prev)inp.es.value=prev;
+ }
+ function syncCustomPesi(prefillObj){
+  if(k!=="pesi")return;
+  customBox.replaceChildren();
+  for(var key in customInp)delete customInp[key];
+  if(!targetIsLuca()||!inp.es||!inp.es.value)return;
+  var extra=getPesiExtraFieldsFor(inp.es.value);
+  if(!extra.length)return;
+  extra.forEach(function(cf){
+   var ci=el("input",{type:cf.type==="number"?"number":"text",id:"f_"+cf.key});
+   if(cf.type==="number")ci.setAttribute("inputmode","decimal");
+   if(prefillObj&&prefillObj[cf.key]!==undefined)ci.value=prefillObj[cf.key];
+   customInp[cf.key]=ci;
+   customBox.append(el("label",{},cf.label+(cf.req?" *":"")),ci);
+  });
+ }
+ if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value;fillEsOptions();syncCustomPesi(er)};inp._a=sa;form.append(el("label",{},"Atleta *"),sa)}
+ F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},f[0]==="es"?"Scegli l’esercizio…":"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
+  var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
+  tg.append(w);
+  if(k==="pesi"&&f[0]==="serie")form.append(customBox);
+ });
+ if(k==="pesi"){
+  fillEsOptions();
+  inp.es.onchange=function(){syncCustomPesi(er)};
+ }
+ var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi";if(inp.ris&&inp.gara)inp.ris.placeholder=hint(inp.gara.value)||"Il tuo risultato migliore"};
+ if(inp.ris&&inp.gara)inp.ris.placeholder="Il tuo risultato migliore";
  form.append(el("div",{class:"tag",style:"margin-top:10px"},"* campo obbligatorio"),el("div",{style:"height:8px"}),el("button",{onclick:function(){add(k,inp)}},er?"Salva modifiche":"Salva"));
  if(er){
   form.append(el("button",{class:"link",style:"margin-top:8px",onclick:function(){EDIT=null;render()}},"Annulla modifica"));
   form.insertBefore(el("div",{class:"tag"},"Modifica in corso"),form.firstChild);
-  F[k].f.forEach(function(f){if(er[f[0]]!==undefined&&inp[f[0]])inp[f[0]].value=er[f[0]]});
   if(inp._a)inp._a.value=er.for||er.by||"";
+  if(k==="pesi")fillEsOptions();
+  F[k].f.forEach(function(f){if(er[f[0]]!==undefined&&inp[f[0]])inp[f[0]].value=er[f[0]]});
+  if(k==="pesi")syncCustomPesi(er);
   var c0=inp.disc||inp.gara;if(c0&&c0.onchange)c0.onchange();
  }
  if(k==="gare")app.append(el("div",{class:"note"},"ℹ️ Inserisci solo il tuo risultato migliore per ogni specialità. Se la specialità è già presente, resta solo il risultato migliore."));
@@ -750,7 +922,7 @@ function lowWins(g){
 function fmtD(d){return d?String(d).split("-").reverse().join("/"):""}
 var COLS={
  gare:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Gara",function(r){return r.gara||""},"s"],["Attrezzo",function(r){return r.kg?r.kg+" kg":(r.gr?r.gr+" g":"")}],["Risultato",function(r){return r.ris||""}],["Note",function(r){return r.note||""}]],
- pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return isBestPeso(r)?el("span",{},[r.kg||"",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"")},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Note",function(r){return r.note||""}]],
+ pesi:[["Atleta",function(r){return nm(r)},"a"],["Data",function(r){return fmtD(r.data)},"",function(r){return r.data||""}],["Esercizio",function(r){return r.es||""},"s"],["Kg",function(r){return isBestPeso(r)?el("span",{},[r.kg||"",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"")},"",function(r){return parseFloat(r.kg)||0}],["Serie",function(r){return r.serie||""}],["Campi extra",function(r){return formatPesiCustom(r)}],["Note",function(r){return r.note||""}]],
  rincorse:[["Atleta",function(r){return nm(r)},"a"],["Disciplina",function(r){return r.disc||""},"s"],["Piedi",function(r){return r.passi2?r.passi+" / "+r.passi2:(r.passi||"")}],["Passi",function(r){return r.np||""}],["Note",function(r){return r.note||""}],["Inserita",function(r){return new Date(r.ts).toLocaleDateString("it-IT")},"",function(r){return r.ts}]]
 };
 F.lavori={t:"Lavori",ic:"🛠️",f:[["rip","Ripetute","text"],["nrip","Numero ripetute","number"],["rec","Recupero","text"],["data","Data","date"]]};
@@ -772,7 +944,18 @@ function hint(g){
 }
 function add(k,inp){
  var v={},any=false;F[k].f.forEach(function(f){v[f[0]]=inp[f[0]].value.trim();if(v[f[0]]&&f[0]!=="data")any=true});
- var mi=missing(k,inp);if(mi.length){alert("Compila i campi obbligatori: "+mi.join(", "));return}
+ var mi=missing(k,inp);
+ if(k==="pesi"&&inp.es&&inp.es.value&&inp._custom){
+  var extra=getPesiExtraFieldsFor(inp.es.value),cfl={};
+  extra.forEach(function(cf){
+   var elIn=inp._custom[cf.key];
+   var val=elIn?elIn.value.trim():"";
+   if(cf.req&&!val)mi.push(cf.label);
+   if(val){v[cf.key]=val;cfl[cf.key]=cf.label}
+  });
+  if(Object.keys(cfl).length)v._cflabels=cfl;
+ }
+ if(mi.length){alert("Compila i campi obbligatori: "+mi.join(", "));return}
  if(admin){var an=inp._a?inp._a.value:"";if(!an){alert("Scegli prima l’atleta");return}v.for=an}
  var old=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
  if(old){
@@ -811,7 +994,7 @@ function add(k,inp){
  if(isRec){celebrate();msg+=" (+Aura!)"}
  if(msg)toast(msg,isRec);
  logit("aggiunto",k,summary(k,v));
- F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});
+ F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});if(inp._custom){for(var ck in inp._custom)inp._custom[ck].value="";if(inp.es&&inp.es.onchange)inp.es.onchange()}
  var ctl=inp.disc||inp.gara;if(ctl&&ctl.onchange)ctl.onchange();
 }
 function rem(k,r){
@@ -827,7 +1010,7 @@ async function init(){
  try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync)}catch(e){db=null}
  try{var sv=JSON.parse(localStorage.getItem("atl_ses")||"null");if(sv&&sv.n&&(sv.h===H_ALL||sv.h===H_ADM))setSes(sv.n,sv.h)}catch(e){}
  if(!db){render();return}
- ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori"]).forEach(function(k){
+ ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori","pesi_cfg"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
    loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(!EDIT&&t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
