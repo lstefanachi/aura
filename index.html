@@ -510,21 +510,12 @@ function pesoCard(r){
   flds.push([fl.kg||"Kg",kgEl]);
  }
  if(r.serie!==undefined&&r.serie!=="")flds.push([fl.serie||"Serie",r.serie||"–"]);
- var seen={};
  getPesiFieldsFor(r.es).forEach(function(cf){
   if(["data","kg","serie","note"].indexOf(cf.key)>=0)return;
   if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!==""){
    if(!isZeroGradiField(r.es,cf.label,r[cf.key]))flds.push([cf.label,String(r[cf.key]).trim()]);
-   seen[cf.key]=1;
   }
  });
- if(r._cflabels){
-  Object.keys(r._cflabels).sort().forEach(function(k){
-   if(!seen[k]&&r[k]!==undefined&&String(r[k]).trim()!==""){
-    if(!isZeroGradiField(r.es,r._cflabels[k],r[k]))flds.push([r._cflabels[k],String(r[k]).trim()]);
-   }
-  });
- }
  if(!flds.length)flds.push(["Data",fmtD(r.data)||"–"]);
  return recCard("pesi",r,flds);
 }
@@ -617,24 +608,14 @@ function isZeroGradiField(exName,label,rawVal){
  return !isNaN(n)&&n===0;
 }
 function formatPesiCustom(r){
- var out=[],seen={};
+ var out=[];
  getPesiExtraFieldsFor(r.es).forEach(function(cf){
   if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!==""){
    if(!isZeroGradiField(r.es,cf.label,r[cf.key])){
     out.push(cf.label+": "+String(r[cf.key]).trim());
    }
-   seen[cf.key]=1;
   }
  });
- if(r._cflabels){
-  Object.keys(r._cflabels).sort().forEach(function(k){
-   if(!seen[k]&&r[k]!==undefined&&String(r[k]).trim()!==""){
-    if(!isZeroGradiField(r.es,r._cflabels[k],r[k])){
-     out.push(r._cflabels[k]+": "+String(r[k]).trim());
-    }
-   }
-  });
- }
  return out.join(" · ");
 }
 function pesoExLabel(r){
@@ -719,6 +700,56 @@ function renamePesiFieldData(exName,fieldKey,newLabel){
   db.collection("pesi").doc(r.id).set(clean).catch(function(){});
  });
 }
+function cleanupOrphanedPesiData(showToast){
+ if(!db||!READY_COLL.pesi||!READY_COLL.pesi_cfg)return 0;
+ var activeEx=getAllPesiExercises();
+ var fixed=0;
+ S.pesi.slice().forEach(function(r){
+  if(r._p)return;
+  var exOk=activeEx.some(function(exN){return matchesPesiExercise(r.es,exN)});
+  if(!exOk){
+   db.collection("pesi").doc(r.id).delete().catch(function(){});
+   fixed++;
+   return;
+  }
+  var validKeys={data:1,kg:1,serie:1,note:1};
+  getPesiFieldsFor(r.es).forEach(function(cf){validKeys[cf.key]=1});
+  var dirty=false;
+  for(var prop in r){
+   if(["id","_p","by","for","ts","es","_cflabels","_flabels"].indexOf(prop)>=0)continue;
+   if(!validKeys[prop]){dirty=true;break}
+  }
+  if(!dirty&&r._cflabels){
+   for(var ck in r._cflabels)if(!validKeys[ck]){dirty=true;break}
+  }
+  if(!dirty&&r._flabels){
+   for(var fk in r._flabels)if(!validKeys[fk]){dirty=true;break}
+  }
+  if(dirty){
+   var clean={};
+   for(var p in r){
+    if(p==="id"||p==="_p")continue;
+    if(p==="_cflabels"&&r._cflabels){
+     var nc={};
+     for(var c2 in r._cflabels)if(validKeys[c2])nc[c2]=r._cflabels[c2];
+     if(Object.keys(nc).length)clean._cflabels=nc;
+    }else if(p==="_flabels"&&r._flabels){
+     var nf={};
+     for(var f2 in r._flabels)if(validKeys[f2])nf[f2]=r._flabels[f2];
+     if(Object.keys(nf).length)clean._flabels=nf;
+    }else if(["by","for","ts","es"].indexOf(p)>=0||validKeys[p]){
+     clean[p]=r[p];
+    }
+   }
+   db.collection("pesi").doc(r.id).set(clean).catch(function(){});
+   fixed++;
+  }
+ });
+ if(showToast){
+  toast(fixed?("Puliti "+fixed+" record residui dal database ✓"):"Database già pulito ✓");
+ }
+ return fixed;
+}
 function pesiCfgPage(app){
  if(!isLuca()){go("pesi");return}
  app.append(el("button",{class:"link",onclick:function(){go("pesi")}},"← Torna a Pesi"));
@@ -727,6 +758,7 @@ function pesiCfgPage(app){
  topCard.append(el("div",{class:"big"},"⚙️ Gestione esercizi e campi pesi"));
  topCard.append(el("div",{class:"mu",style:"margin-top:4px"},"Modifica, elimina o aggiungi campi per ogni esercizio."));
  topCard.append(el("button",{style:"margin-top:10px",onclick:function(){LUCA_NEW_EX_OPEN=!LUCA_NEW_EX_OPEN;render()}},LUCA_NEW_EX_OPEN?"Chiudi nuovo esercizio":"＋ Nuovo esercizio"));
+ topCard.append(el("button",{class:"sec2",style:"margin-top:8px",onclick:function(){cleanupOrphanedPesiData(true)}},"🧹 Pulisci valori/campi residui nel database"));
 
  if(LUCA_NEW_EX_OPEN){
   var newExInp=el("input",{type:"text",placeholder:"Es. Hip Thrust, Affondi, Box Jump…",style:"margin-top:8px"});
@@ -979,17 +1011,8 @@ function section(app,k){
  var fOpts={};
  if(k==="pesi"){
   fc.append(el("option",{value:""},"Tutti i campi"));
-  BASE_PESI_FIELDS.forEach(function(bf){if(bf.label)fOpts[bf.label.trim()]=1});
   getAllPesiExercises().forEach(function(exN){
    getPesiFieldsFor(exN).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
-  });
-  getLucaPesiCfg().forEach(function(c){
-   (c.allFields||[]).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
-   (c.fields||[]).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
-  });
-  all.forEach(function(r){
-   if(r._flabels)Object.keys(r._flabels).forEach(function(key){if(r._flabels[key])fOpts[String(r._flabels[key]).trim()]=1});
-   if(r._cflabels)Object.keys(r._cflabels).forEach(function(key){if(r._cflabels[key])fOpts[String(r._cflabels[key]).trim()]=1});
   });
   Object.keys(fOpts).sort(function(x,y){return x.localeCompare(y,"it")}).forEach(function(v){fc.append(el("option",{value:v},v))});
  }
@@ -1460,6 +1483,7 @@ function rem(k,r){
 async function loadNames(){
  var ids={};["gare","pesi","rincorse","log"].forEach(function(k){S[k].forEach(function(r){if(r.by)ids[r.by]=1})});ids[me]=1;
 }
+var READY_COLL={};
 async function init(){
  render();
  try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync)}catch(e){db=null}
@@ -1468,6 +1492,10 @@ async function init(){
  ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori","pesi_cfg","preferiti"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
+   READY_COLL[k]=true;
+   if((k==="pesi"||k==="pesi_cfg")&&READY_COLL.pesi&&READY_COLL.pesi_cfg){
+    cleanupOrphanedPesiData(false);
+   }
    loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(!EDIT&&t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
   },function(){});
  });
