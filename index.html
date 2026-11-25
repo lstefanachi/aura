@@ -174,6 +174,27 @@ var AURA_LV=[
  {min:3201,max:5000,name:"Top Aura",ic:"💎",bg:"linear-gradient(135deg,#d97706,#ec4899)",fg:"#fff"},
  {min:5000,max:null,name:"Aura Infinita",ic:"♾️",bg:"linear-gradient(135deg,#f59e0b,#8b5cf6,#ec4899)",fg:"#fff"}
 ];
+function serieScore(s){
+ var t=String(s||"").trim().toLowerCase();
+ if(!t)return 0;
+ var total=0;
+ t.split(/[+,;\/]+/).forEach(function(part){
+  var nums=part.match(/\d+(?:[.,]\d+)?/g);
+  if(!nums)return;
+  if(/[x×*]/.test(part)&&nums.length>=2){
+   var prod=1;
+   nums.forEach(function(n){prod*=(parseFloat(n.replace(",","."))||0)});
+   total+=prod;
+  }else{
+   total+=(parseFloat(nums[0].replace(",","."))||0);
+  }
+ });
+ return total;
+}
+function isBetterPeso(kgA,serA,kgB,serB){
+ if(kgA!==kgB)return kgA>kgB;
+ return serA>serB;
+}
 function getAura(k){
  // Gare: each discipline keeps only the athlete's best result (1 PB per discipline)
  var garePB={};
@@ -182,8 +203,8 @@ function getAura(k){
  });
  var pbG=Object.keys(garePB).length;
 
- // Pesi: count distinct exercises/variants (e.g. Panca with different degrees) where the athlete has a valid PR (> 0 kg),
- // plus bonus points for improvements (each time a higher weight was logged in that exercise/variant)
+ // Pesi: count distinct exercises/variants where the athlete has a valid PR (> 0 kg),
+ // plus bonus points for improvements (higher kg, or equal kg with strictly higher serie x ripetizioni)
  var pesiByEx={};
  S.pesi.forEach(function(r){
   if(keyOf(r)===k&&r.es){
@@ -191,18 +212,19 @@ function getAura(k){
    if(!isNaN(kg)&&kg>0){
     var e=pesoExKey(r);
     if(!pesiByEx[e])pesiByEx[e]=[];
-    pesiByEx[e].push({kg:kg,ts:r.ts||0,d:r.data||""});
+    pesiByEx[e].push({kg:kg,ser:serieScore(r.serie),ts:r.ts||0,d:r.data||""});
    }
   }
  });
  var pbP=0,impP=0;
  Object.keys(pesiByEx).forEach(function(e){
   var arr=pesiByEx[e].slice().sort(function(a,b){return a.d.localeCompare(b.d)||a.ts-b.ts});
-  var curMax=0;
+  var curKg=0,curSer=-1;
   arr.forEach(function(item){
-   if(item.kg>curMax){
-    if(curMax===0)pbP++;else impP++;
-    curMax=item.kg;
+   if(curKg===0){
+    pbP++;curKg=item.kg;curSer=item.ser;
+   }else if(isBetterPeso(item.kg,item.ser,curKg,curSer)){
+    impP++;curKg=item.kg;curSer=item.ser;
    }
   });
  });
@@ -331,17 +353,18 @@ function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
  var items=[["home","🏃","Atleti"],["gare","🏆","Gare"],["pesi","🏋️","Pesi"],["rincorse","📏","Rincorse"]];
  items.push(["lavori","🛠️","Lavori"],["allenamenti","📋","Allenamenti"]);
+ if(isLuca())items.push(["pesi_cfg","⚙️","Campi Pesi"]);
  items.forEach(function(i){n.append(el("button",{class:(view===i[0]||(view==="atleta"&&i[0]==="home"))?"on":"",onclick:function(){go(i[0])}},[el("span",{},i[1]),i[2]]))});
 }
 function render(){
  var app=document.getElementById("app");app.replaceChildren();navbar();
- var t={home:"Atletica Alba",account:"Il mio profilo",atleta:"Atletica Alba",allenamenti:"Allenamenti",lavori:"Lavori",gare:F.gare.t,pesi:F.pesi.t,rincorse:F.rincorse.t};
+ var t={home:"Atletica Alba",account:"Il mio profilo",atleta:"Atletica Alba",allenamenti:"Allenamenti",lavori:"Lavori",pesi_cfg:"Campi Pesi",gare:F.gare.t,pesi:F.pesi.t,rincorse:F.rincorse.t};
  document.getElementById("ttl").textContent=t[view]||"Atletica Alba";
  document.getElementById("sub").textContent="Avrai aura?";
  document.getElementById("top").style.display=ses?"flex":"none";if(ses)paintMe();
  if(!db){app.append(el("div",{class:"card"},"App non configurata: mancano indirizzo e chiave del database."));return}
  if(!ses){login(app);return}
- if(view==="home")home(app);else if(view==="account")account(app);else if(view==="atleta")atleta(app);else if(view==="allenamenti")allenamenti(app);else if(view==="lavori")lavori(app);else section(app,view);
+ if(view==="home")home(app);else if(view==="account")account(app);else if(view==="atleta")atleta(app);else if(view==="allenamenti")allenamenti(app);else if(view==="lavori")lavori(app);else if(view==="pesi_cfg")pesiCfgPage(app);else section(app,view);
 }
 function people(){
  var m={};
@@ -404,9 +427,18 @@ function atleta(app){
  if(g.length)items("gare",g);else none();
  head("🏋️ Pesi");
  if(p.length){
-  var best={},bestLbl={};p.forEach(function(x){var kEx=pesoExKey(x)||"?",lbl=pesoExLabel(x)||"?",kg=parseFloat(x.kg);if(!isNaN(kg)&&(!best[kEx]||kg>best[kEx])){best[kEx]=kg;bestLbl[kEx]=lbl}});
+  var best={},bestLbl={};
+  p.forEach(function(x){
+   var kEx=pesoExKey(x)||"?",lbl=pesoExLabel(x)||"?",kg=parseFloat(x.kg),ser=serieScore(x.serie);
+   if(!isNaN(kg)&&kg>0&&(!best[kEx]||isBetterPeso(kg,ser,best[kEx].kg,best[kEx].ser))){
+    best[kEx]={kg:kg,ser:ser,serie:(x.serie||"").trim()};bestLbl[kEx]=lbl;
+   }
+  });
   var c=el("div",{class:"card"},el("div",{class:"tag"},"Record"));
-  Object.keys(best).forEach(function(kEx){c.append(el("div",{class:"row"},[el("span",{},bestLbl[kEx]),el("span",{class:"big"},best[kEx]+" kg")]))});
+  Object.keys(best).forEach(function(kEx){
+   var b=best[kEx];
+   c.append(el("div",{class:"row"},[el("span",{},bestLbl[kEx]),el("span",{class:"big"},b.kg+" kg"+(b.serie?" ("+b.serie+")":""))]));
+  });
   app.append(c);items("pesi",p);
  }else none();
  head("📏 Rincorse");
@@ -437,9 +469,23 @@ function recCard(k,r,fields){
 }
 function isBestPeso(r){
  var kg=parseFloat(r.kg);if(isNaN(kg)||kg<=0)return false;
- var key=keyOf(r),exK=pesoExKey(r),max=0;
- S.pesi.forEach(function(x){if(keyOf(x)===key&&pesoExKey(x)===exK){var v=parseFloat(x.kg);if(!isNaN(v)&&v>max)max=v}});
- return kg>=max&&max>0;
+ var key=keyOf(r),exK=pesoExKey(r),bestRec=null,bestKg=0,bestSer=-1;
+ S.pesi.forEach(function(x){
+  if(keyOf(x)===key&&pesoExKey(x)===exK){
+   var v=parseFloat(x.kg);
+   if(!isNaN(v)&&v>0){
+    var sv=serieScore(x.serie);
+    if(!bestRec||isBetterPeso(v,sv,bestKg,bestSer)){
+     bestRec=x;bestKg=v;bestSer=sv;
+    }else if(v===bestKg&&sv===bestSer){
+     // Keep the earliest entry if both kg and serie x ripetizioni are identical
+     var cmp=(x.data||"").localeCompare(bestRec.data||"")||((x.ts||0)-(bestRec.ts||0));
+     if(cmp<0)bestRec=x;
+    }
+   }
+  }
+ });
+ return !!(bestRec&&bestRec.id===r.id);
 }
 function pesoCard(r){
  var kgEl=isBestPeso(r)?el("span",{},[r.kg||"–",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"–");
@@ -519,19 +565,12 @@ function pesoExLabel(r){
 function pesoExKey(r){
  return pesoExLabel(r).toLowerCase();
 }
-function renderLucaPesiManager(app){
- if(!isLuca())return;
+function pesiCfgPage(app){
+ if(!isLuca()){go("pesi");return}
+ app.append(el("button",{class:"link",onclick:function(){go("pesi")}},"← Torna a Pesi"));
  var wrap=el("div",{class:"card",style:"border-color:var(--ac)"});
- var hdr=el("div",{class:"row",style:"align-items:center"},[
-  el("div",{class:"big"},"⚙️ Esercizi e campi personalizzati"),
-  el("button",{class:"pill b",onclick:function(){LUCA_CFG_OPEN=!LUCA_CFG_OPEN;render()}},LUCA_CFG_OPEN?"Chiudi":"Gestisci")
- ]);
- wrap.append(hdr);
- if(!LUCA_CFG_OPEN){
-  var cnt=getLucaPesiCfg().length;
-  wrap.append(el("div",{class:"mu",style:"margin-top:4px"},cnt?(cnt+" eserciz"+(cnt===1?"io personalizzato":"i personalizzati")+" configurat"+(cnt===1?"o":"i")):"Aggiungi nuovi esercizi o campi specifici solo per un esercizio."));
-  app.append(wrap);return;
- }
+ wrap.append(el("div",{class:"big"},"⚙️ Esercizi e campi personalizzati"));
+ wrap.append(el("div",{class:"mu",style:"margin-top:4px"},"Aggiungi nuovi esercizi o configura campi personalizzati per i pesi."));
  var cfgs=getLucaPesiCfg();
  var baseEs=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
  // Add new exercise box
@@ -619,30 +658,19 @@ function renderLucaPesiManager(app){
  app.append(wrap);
 }
 function section(app,k){
- if(k==="pesi")renderLucaPesiManager(app);
  var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={},customBox=el("div",{}),customInp={};
  inp._custom=customInp;
  var er=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
  if(EDIT&&!er)EDIT=null;
- function targetIsLuca(){
-  if(isLuca())return true;
-  if(admin){
-   var aVal=inp._a?inp._a.value:(er?(er.for||er.by||""):ATH);
-   return fmt(aVal).toLowerCase()==="luca stefanachi";
-  }
-  return false;
- }
  function fillEsOptions(){
   if(k!=="pesi"||!inp.es)return;
   var prev=inp.es.value;
   inp.es.replaceChildren();
   inp.es.append(el("option",{value:""},"Scegli l’esercizio…"));
   var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3].slice();
-  if(targetIsLuca()){
-   getLucaPesiCfg().forEach(function(c){
-    if(c.nome&&!base.some(function(b){return b.toLowerCase()===c.nome.toLowerCase()}))base.push(c.nome);
-   });
-  }
+  getLucaPesiCfg().forEach(function(c){
+   if(c.nome&&!base.some(function(b){return b.toLowerCase()===c.nome.toLowerCase()}))base.push(c.nome);
+  });
   base.forEach(function(o){inp.es.append(el("option",{value:o},o))});
   if(prev)inp.es.value=prev;
  }
@@ -650,7 +678,7 @@ function section(app,k){
   if(k!=="pesi")return;
   customBox.replaceChildren();
   for(var key in customInp)delete customInp[key];
-  if(!targetIsLuca()||!inp.es||!inp.es.value)return;
+  if(!inp.es||!inp.es.value)return;
   var extra=getPesiExtraFieldsFor(inp.es.value);
   if(!extra.length)return;
   extra.forEach(function(cf){
@@ -695,9 +723,7 @@ function section(app,k){
  uniq(C[si][1]).forEach(function(v){sOpts[v]=1});
  if(k==="pesi"){
   all.forEach(function(r){var vl=pesoExLabel(r);if(vl)sOpts[vl]=1});
-  if(isLuca()||admin){
-   getLucaPesiCfg().forEach(function(c){if(c.nome)sOpts[c.nome.trim()]=1});
-  }
+  getLucaPesiCfg().forEach(function(c){if(c.nome)sOpts[c.nome.trim()]=1});
  }
  Object.keys(sOpts).sort(function(x,y){return x.localeCompare(y,"it")}).forEach(function(v){fs.append(el("option",{value:v},v))});
  if((k==="pesi"||k==="rincorse"||k==="gare")&&!admin){FL.a="";fs.style.gridColumn="1 / -1"}
@@ -1054,11 +1080,22 @@ function add(k,inp){
   }
  }
  if(k==="pesi"&&v.es&&v.kg){
-  var keyP="id:"+(v.for||me),kgNew=parseFloat(v.kg),exNewK=pesoExKey(v),exNewLbl=pesoExLabel(v);
+  var keyP="id:"+(v.for||me),kgNew=parseFloat(v.kg),serNew=serieScore(v.serie),exNewK=pesoExKey(v),exNewLbl=pesoExLabel(v);
   if(!isNaN(kgNew)&&kgNew>0){
-   var prevMax=0;
-   S.pesi.forEach(function(r){if(keyOf(r)===keyP&&pesoExKey(r)===exNewK){var x=parseFloat(r.kg);if(!isNaN(x)&&x>prevMax)prevMax=x}});
-   if(kgNew>prevMax){msg="🏆 Nuovo massimale "+exNewLbl+": "+kgNew+" kg!";isRec=true;}
+   var prevMaxKg=0,prevMaxSer=-1;
+   S.pesi.forEach(function(r){
+    if(keyOf(r)===keyP&&pesoExKey(r)===exNewK){
+     var x=parseFloat(r.kg);
+     if(!isNaN(x)&&x>0){
+      var sx=serieScore(r.serie);
+      if(isBetterPeso(x,sx,prevMaxKg,prevMaxSer)){prevMaxKg=x;prevMaxSer=sx}
+     }
+    }
+   });
+   if(prevMaxKg===0||isBetterPeso(kgNew,serNew,prevMaxKg,prevMaxSer)){
+    msg="🏆 Nuovo massimale "+exNewLbl+": "+kgNew+" kg"+(v.serie?" ("+v.serie+")":"")+"!";
+    isRec=true;
+   }
   }
  }
 
