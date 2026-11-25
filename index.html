@@ -649,6 +649,76 @@ function pesoExKey(r){
 function fieldTypeLabel(t){
  return t==="number"?"Numero":(t==="date"?"Data":"Testo");
 }
+function matchesPesiExercise(rowEs,exName){
+ var a=(rowEs||"").trim().toLowerCase();
+ var b=(exName||"").trim().toLowerCase();
+ if(!a||!b)return false;
+ if(a===b)return true;
+ if((a==="panca"||a==="panca piana")&&(b==="panca"||b==="panca piana"))return true;
+ return false;
+}
+function purgePesiExerciseData(exName){
+ var deletedIds={};
+ S.pesi.filter(function(r){return matchesPesiExercise(r.es,exName)}).forEach(function(r){
+  deletedIds[r.id]=true;
+  db.collection("pesi").doc(r.id).delete().catch(function(){});
+ });
+ if(EDIT&&EDIT.k==="pesi"&&deletedIds[EDIT.id])EDIT=null;
+ if(FIL.pesi&&FIL.pesi.s){
+  var fsLow=FIL.pesi.s.trim().toLowerCase(),exLow=exName.trim().toLowerCase();
+  if(fsLow===exLow||fsLow.indexOf(exLow+" (")===0)FIL.pesi.s="";
+ }
+}
+function purgePesiFieldData(exName,fieldKey,fieldLabel){
+ S.pesi.filter(function(r){return matchesPesiExercise(r.es,exName)}).forEach(function(r){
+  var hasVal=(r[fieldKey]!==undefined);
+  var hasCfl=(r._cflabels&&r._cflabels[fieldKey]!==undefined);
+  var hasFl=(r._flabels&&r._flabels[fieldKey]!==undefined);
+  if(!hasVal&&!hasCfl&&!hasFl)return;
+  var clean={};
+  for(var prop in r){
+   if(prop==="id"||prop==="_p"||prop===fieldKey)continue;
+   if(prop==="_cflabels"&&r._cflabels){
+    var nc={};
+    for(var ck in r._cflabels)if(ck!==fieldKey)nc[ck]=r._cflabels[ck];
+    if(Object.keys(nc).length)clean._cflabels=nc;
+   }else if(prop==="_flabels"&&r._flabels){
+    var nf={};
+    for(var fk in r._flabels)if(fk!==fieldKey)nf[fk]=r._flabels[fk];
+    if(Object.keys(nf).length)clean._flabels=nf;
+   }else{
+    clean[prop]=r[prop];
+   }
+  }
+  db.collection("pesi").doc(r.id).set(clean).catch(function(){});
+ });
+ if(FIL.pesi&&FIL.pesi.f&&fieldLabel&&FIL.pesi.f.trim().toLowerCase()===fieldLabel.trim().toLowerCase()){
+  FIL.pesi.f="";
+ }
+}
+function renamePesiFieldData(exName,fieldKey,newLabel){
+ S.pesi.filter(function(r){return matchesPesiExercise(r.es,exName)}).forEach(function(r){
+  var hasCfl=(r._cflabels&&r._cflabels[fieldKey]!==undefined);
+  var hasFl=(r._flabels&&r._flabels[fieldKey]!==undefined);
+  if(!hasCfl&&!hasFl)return;
+  var clean={};
+  for(var prop in r){
+   if(prop==="id"||prop==="_p")continue;
+   if(prop==="_cflabels"&&r._cflabels){
+    var nc={};
+    for(var ck in r._cflabels)nc[ck]=(ck===fieldKey)?newLabel:r._cflabels[ck];
+    clean._cflabels=nc;
+   }else if(prop==="_flabels"&&r._flabels){
+    var nf={};
+    for(var fk in r._flabels)nf[fk]=(fk===fieldKey)?newLabel:r._flabels[fk];
+    clean._flabels=nf;
+   }else{
+    clean[prop]=r[prop];
+   }
+  }
+  db.collection("pesi").doc(r.id).set(clean).catch(function(){});
+ });
+}
 function pesiCfgPage(app){
  if(!isLuca()){go("pesi");return}
  app.append(el("button",{class:"link",onclick:function(){go("pesi")}},"← Torna a Pesi"));
@@ -692,7 +762,8 @@ function pesiCfgPage(app){
   var grpHdr=el("div",{class:"row",style:"align-items:center;margin-bottom:6px"},[
    el("div",{class:"big",style:"font-size:17px"},exName),
    el("button",{class:"del",onclick:function(){
-    if(!confirm("Eliminare l’esercizio “"+exName+"” dall’elenco dei pesi?"))return;
+    if(!confirm("Eliminare l’esercizio “"+exName+"” e TUTTI i suoi dati salvati nel database?"))return;
+    purgePesiExerciseData(exName);
     var cfgs=getLucaPesiCfg();
     var curCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===exName.trim().toLowerCase()})[0];
     var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
@@ -710,7 +781,7 @@ function pesiCfgPage(app){
       ts:curCfg?(curCfg.ts||Date.now()):Date.now()
      }).catch(function(){});
     }
-    toast("Esercizio rimosso ✓");
+    toast("Esercizio e relativi dati eliminati ✓");
    }},"Elimina esercizio")
   ]);
   grp.append(grpHdr);
@@ -746,6 +817,7 @@ function pesiCfgPage(app){
         var nextF=cloneFieldList(fields);
         nextF[idx]={key:cf.key,label:nl,type:eType.value,req:eReq.value==="1"};
         savePesiExFields(exName,nextF);
+        renamePesiFieldData(exName,cf.key,nl);
         LUCA_EDIT_FIELD=null;
         toast("Campo modificato ✓");
        }},"Salva"),
@@ -766,11 +838,12 @@ function pesiCfgPage(app){
         render();
        }},"Modifica"),
        el("button",{class:"pill r",onclick:function(){
-        if(!confirm("Eliminare il campo “"+cf.label+"” da "+exName+"?"))return;
+        if(!confirm("Eliminare il campo “"+cf.label+"” da "+exName+" e TUTTI i suoi valori salvati nel database?"))return;
         var nextF=fields.filter(function(_,i){return i!==idx});
         savePesiExFields(exName,nextF);
+        purgePesiFieldData(exName,cf.key,cf.label);
         if(LUCA_EDIT_FIELD&&LUCA_EDIT_FIELD.ex===exName)LUCA_EDIT_FIELD=null;
-        toast("Campo eliminato ✓");
+        toast("Campo e valori salvati eliminati ✓");
        }},"Elimina")
       ])
      ]);
