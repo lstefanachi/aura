@@ -544,7 +544,7 @@ function drawPesi(rows,box){
   g.forEach(function(r){box.append(pesoCard(r))});
  });
 }
-var LUCA_NEW_EX_OPEN=false,LUCA_ADD_FIELD_EX="",LUCA_EDIT_FIELD=null;
+var LUCA_NEW_EX_OPEN=false,LUCA_ADD_FIELD_EX="",LUCA_EDIT_FIELD=null,LUCA_EDIT_EX="";
 var BASE_PESI_FIELDS=[
  {key:"data",label:"Data",type:"date",req:true},
  {key:"kg",label:"Kg",type:"number",req:true},
@@ -700,6 +700,76 @@ function renamePesiFieldData(exName,fieldKey,newLabel){
   db.collection("pesi").doc(r.id).set(clean).catch(function(){});
  });
 }
+function renamePesiExercise(oldName,newName){
+ var oldT=(oldName||"").trim(),newT=(newName||"").trim();
+ if(!oldT||!newT||oldT===newT)return;
+ var fields=getPesiFieldsFor(oldT);
+ var legacyExtra=fields.filter(function(f){return ["data","kg","serie","note"].indexOf(f.key)<0});
+ var cfgs=getLucaPesiCfg();
+ var oldCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===oldT.toLowerCase()})[0];
+ var newCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===newT.toLowerCase()})[0];
+ var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
+ var isOldBase=base.some(function(b){return b.toLowerCase()===oldT.toLowerCase()});
+
+ if(oldCfg&&!isOldBase){
+  if(newCfg&&newCfg.id!==oldCfg.id){
+   db.collection("pesi_cfg").doc(oldCfg.id).delete().catch(function(){});
+   db.collection("pesi_cfg").doc(newCfg.id).set({
+    nome:newT,
+    allFields:cloneFieldList(fields),
+    fields:cloneFieldList(legacyExtra),
+    hidden:false,
+    owner:newCfg.owner||me,
+    ts:newCfg.ts||Date.now()
+   }).catch(function(){});
+  }else{
+   db.collection("pesi_cfg").doc(oldCfg.id).set({
+    nome:newT,
+    allFields:cloneFieldList(fields),
+    fields:cloneFieldList(legacyExtra),
+    hidden:false,
+    owner:oldCfg.owner||me,
+    ts:oldCfg.ts||Date.now()
+   }).catch(function(){});
+  }
+ }else{
+  var hideId=oldCfg?oldCfg.id:("pcfg-"+uid());
+  db.collection("pesi_cfg").doc(hideId).set({
+   nome:oldT,
+   allFields:cloneFieldList(fields),
+   fields:cloneFieldList(legacyExtra),
+   hidden:true,
+   owner:oldCfg?(oldCfg.owner||me):me,
+   ts:oldCfg?(oldCfg.ts||Date.now()):Date.now()
+  }).catch(function(){});
+
+  var targetId=(newCfg&&newCfg.id!==hideId)?newCfg.id:("pcfg-"+uid());
+  db.collection("pesi_cfg").doc(targetId).set({
+   nome:newT,
+   allFields:cloneFieldList(fields),
+   fields:cloneFieldList(legacyExtra),
+   hidden:false,
+   owner:(newCfg&&newCfg.owner)||me,
+   ts:(newCfg&&newCfg.ts)||Date.now()
+  }).catch(function(){});
+ }
+
+ S.pesi.filter(function(r){return matchesPesiExercise(r.es,oldT)}).forEach(function(r){
+  var updated={};
+  for(var prop in r){
+   if(prop==="id"||prop==="_p")continue;
+   updated[prop]=r[prop];
+  }
+  updated.es=newT;
+  db.collection("pesi").doc(r.id).set(updated).catch(function(){});
+ });
+
+ if(FIL.pesi&&FIL.pesi.s){
+  var fsLow=FIL.pesi.s.trim().toLowerCase(),oldLow=oldT.toLowerCase();
+  if(fsLow===oldLow)FIL.pesi.s=newT;
+  else if(fsLow.indexOf(oldLow+" (")===0)FIL.pesi.s=newT+FIL.pesi.s.slice(oldT.length);
+ }
+}
 function cleanupOrphanedPesiData(showToast){
  if(!db||!READY_COLL.pesi||!READY_COLL.pesi_cfg)return 0;
  var activeEx=getAllPesiExercises();
@@ -791,32 +861,66 @@ function pesiCfgPage(app){
  allExList.forEach(function(exName){
   var fields=getPesiFieldsFor(exName);
   var grp=el("div",{class:"card"});
-  var grpHdr=el("div",{class:"row",style:"align-items:center;margin-bottom:6px"},[
-   el("div",{class:"big",style:"font-size:17px"},exName),
-   el("button",{class:"del",onclick:function(){
-    if(!confirm("Eliminare l’esercizio “"+exName+"” e TUTTI i suoi dati salvati nel database?"))return;
-    purgePesiExerciseData(exName);
-    var cfgs=getLucaPesiCfg();
-    var curCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===exName.trim().toLowerCase()})[0];
-    var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
-    var isBase=base.some(function(b){return b.toLowerCase()===exName.trim().toLowerCase()});
-    if(curCfg&&!isBase){
-     db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
-    }else{
-     var docId=curCfg?curCfg.id:("pcfg-"+uid());
-     db.collection("pesi_cfg").doc(docId).set({
-      nome:exName,
-      allFields:fields,
-      fields:curCfg?(curCfg.fields||[]):[],
-      hidden:true,
-      owner:me,
-      ts:curCfg?(curCfg.ts||Date.now()):Date.now()
-     }).catch(function(){});
-    }
-    toast("Esercizio e relativi dati eliminati ✓");
-   }},"Elimina esercizio")
-  ]);
-  grp.append(grpHdr);
+  if(LUCA_EDIT_EX===exName){
+   var exNameInp=el("input",{type:"text",placeholder:"Nome esercizio"});
+   exNameInp.value=exName;
+   var editExBox=el("div",{style:"padding:10px;background:var(--bg);border:1px solid var(--ac);border-radius:10px;margin-bottom:8px"},[
+    el("div",{class:"tag",style:"margin-bottom:4px"},"Modifica nome esercizio"),
+    exNameInp,
+    el("div",{style:"display:flex;gap:8px;margin-top:8px"},[
+     el("button",{style:"padding:10px",onclick:function(){
+      var nextEx=exNameInp.value.trim();
+      if(!nextEx){alert("Scrivi il nome dell’esercizio.");return}
+      if(nextEx.toLowerCase()!==exName.trim().toLowerCase()&&allExList.some(function(x){return x.toLowerCase()===nextEx.toLowerCase()})){
+       alert("Esiste già un esercizio con questo nome.");return;
+      }
+      if(nextEx!==exName){
+       renamePesiExercise(exName,nextEx);
+       toast("Nome esercizio aggiornato ✓");
+      }
+      LUCA_EDIT_EX="";
+      render();
+     }},"Salva"),
+     el("button",{class:"sec2",style:"padding:10px",onclick:function(){LUCA_EDIT_EX="";render()}},"Annulla")
+    ])
+   ]);
+   grp.append(editExBox);
+  }else{
+   var grpHdr=el("div",{class:"row",style:"align-items:center;margin-bottom:6px"},[
+    el("div",{class:"big",style:"font-size:17px"},exName),
+    el("div",{style:"display:flex;gap:10px;align-items:center;flex-shrink:0"},[
+     el("button",{class:"link",style:"font-size:13px",onclick:function(){
+      LUCA_EDIT_EX=exName;
+      LUCA_EDIT_FIELD=null;
+      LUCA_ADD_FIELD_EX="";
+      render();
+     }},"Modifica nome"),
+     el("button",{class:"del",onclick:function(){
+      if(!confirm("Eliminare l’esercizio “"+exName+"” e TUTTI i suoi dati salvati nel database?"))return;
+      purgePesiExerciseData(exName);
+      var cfgs=getLucaPesiCfg();
+      var curCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===exName.trim().toLowerCase()})[0];
+      var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
+      var isBase=base.some(function(b){return b.toLowerCase()===exName.trim().toLowerCase()});
+      if(curCfg&&!isBase){
+       db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
+      }else{
+       var docId=curCfg?curCfg.id:("pcfg-"+uid());
+       db.collection("pesi_cfg").doc(docId).set({
+        nome:exName,
+        allFields:fields,
+        fields:curCfg?(curCfg.fields||[]):[],
+        hidden:true,
+        owner:me,
+        ts:curCfg?(curCfg.ts||Date.now()):Date.now()
+       }).catch(function(){});
+      }
+      toast("Esercizio e relativi dati eliminati ✓");
+     }},"Elimina esercizio")
+    ])
+   ]);
+   grp.append(grpHdr);
+  }
 
   if(!fields.length){
    grp.append(el("div",{class:"mu",style:"margin:6px 0"},"Nessun campo configurato per questo esercizio."));
