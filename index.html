@@ -302,7 +302,9 @@ function notify(c){
  subs[c]({docs:Object.keys(m).map(function(i){var x=m[i];return{id:x.id,data:function(){return x.v},metadata:{hasPendingWrites:x.p}}})});
 }
 async function pull(){
+ if(Q.length)return;
  var full=(tick%6===0),q=SB.from("entries").select("id,coll,data");var nl=true;if(!full)q=q.neq("coll","profili");if(nl)q=q.neq("coll","log");q=q.neq("coll","foto");var r=await q;if(r.error)return;
+ if(Q.length)return;
  var n={gare:[],pesi:[],rincorse:[],log:[],persone:[],profili:[],allenamenti:[],lavori:[],pesi_cfg:[],preferiti:[]};
  r.data.forEach(function(x){if(n[x.coll])n[x.coll].push({id:x.id,data:x.data})});
  if(!full)n.profili=cache.profili;
@@ -314,8 +316,21 @@ async function pull(){
 async function flush(){
  while(Q.length){
   var o=Q[0],r=o.op==="set"?await SB.from("entries").upsert({id:o.id,coll:o.c,data:o.v}):await SB.from("entries").delete().eq("id",o.id);
-  if(r.error){if(r.error.code&&navigator.onLine){Q.shift();saveQ();continue}return}
+  if(r.error){
+   var code=String(r.error.code||"");
+   if((code.indexOf("22")===0||code.indexOf("23")===0)&&navigator.onLine){Q.shift();saveQ();continue}
+   return;
+  }
+  if(o.op==="set"){
+   var arr=cache[o.c]||[];
+   var idx=arr.findIndex(function(x){return x.id===o.id});
+   if(idx>=0)arr[idx]={id:o.id,data:o.v};else arr.push({id:o.id,data:o.v});
+   cache[o.c]=arr;
+  }else if(cache[o.c]){
+   cache[o.c]=cache[o.c].filter(function(x){return x.id!==o.id});
+  }
   Q.shift();saveQ();
+  notify(o.c);
  }
 }
 var busy=false;
@@ -771,7 +786,7 @@ function renamePesiExercise(oldName,newName){
  }
 }
 function cleanupOrphanedPesiData(showToast){
- if(!db||!READY_COLL.pesi||!READY_COLL.pesi_cfg)return 0;
+ if(!db)return 0;
  var activeEx=getAllPesiExercises();
  var fixed=0;
  S.pesi.slice().forEach(function(r){
@@ -1587,19 +1602,15 @@ function rem(k,r){
 async function loadNames(){
  var ids={};["gare","pesi","rincorse","log"].forEach(function(k){S[k].forEach(function(r){if(r.by)ids[r.by]=1})});ids[me]=1;
 }
-var READY_COLL={};
 async function init(){
  render();
- try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync)}catch(e){db=null}
+ try{SB=supabase.createClient(URL_,KEY_);db=mkdb();document.getElementById("out").onclick=logout;sync();setInterval(sync,10000);window.addEventListener("online",sync);document.addEventListener("visibilitychange",function(){if(document.visibilityState==="hidden"&&Q.length)flush()});window.addEventListener("pagehide",function(){if(Q.length)flush()})}catch(e){db=null}
  try{var sv=JSON.parse(localStorage.getItem("atl_ses")||"null");if(sv&&sv.n&&(sv.h===H_ALL||sv.h===H_ADM))setSes(sv.n,sv.h)}catch(e){}
  if(!db){render();return}
  ["gare","pesi","rincorse"].concat(["persone","profili","allenamenti","lavori","pesi_cfg","preferiti"]).forEach(function(k){
   db.collection(k).onSnapshot(function(s){
    S[k]=s.docs.map(function(d){var o=d.data();o.id=d.id;o._p=d.metadata.hasPendingWrites;return o});
-   READY_COLL[k]=true;
-   if((k==="pesi"||k==="pesi_cfg")&&READY_COLL.pesi&&READY_COLL.pesi_cfg){
-    cleanupOrphanedPesiData(false);
-   }
+
    loadNames().then(function(){var t=document.activeElement&&document.activeElement.tagName;if(!EDIT&&t!=="INPUT"&&t!=="SELECT"&&t!=="TEXTAREA")render()});
   },function(){});
  });
