@@ -347,7 +347,21 @@ function rincLines(r){
  if(r.note)L.push("Note: "+r.note);
  return L.filter(Boolean).join("\n");
 }
-function summary(k,v){if(k==="rincorse")return rincLines(v);var base=F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean);if(k==="pesi"){var cx=formatPesiCustom(v);if(cx)base.push(cx)}return base.join(" · ")}
+function summary(k,v){
+ if(k==="rincorse")return rincLines(v);
+ if(k==="pesi"){
+  var out=[];
+  if(v.data)out.push(v.data);
+  if(v.es)out.push(v.es);
+  if(v.kg)out.push(v.kg+" kg");
+  if(v.serie)out.push(v.serie);
+  var cx=formatPesiCustom(v);if(cx)out.push(cx);
+  if(v.note)out.push(v.note);
+  return out.join(" · ");
+ }
+ var base=F[k].f.map(function(f){var x=v[f[0]];return x&&(f[0]==="passi"?(v.passi2?"Piedi 1: "+x:x+" piedi"):f[0]==="passi2"?"Piedi 2: "+x:f[0]==="np"?x+" passi":f[0]==="gr"?x+" g":f[0]==="kg"?x+" kg":x)}).filter(Boolean);
+ return base.join(" · ");
+}
 function go(v,s){view=v;sel=s||null;EDIT=null;LS=null;render();window.scrollTo(0,0)}
 function navbar(){
  var n=document.getElementById("nav");n.replaceChildren();if(!ses)return;
@@ -488,8 +502,31 @@ function isBestPeso(r){
  return !!(bestRec&&bestRec.id===r.id);
 }
 function pesoCard(r){
- var kgEl=isBestPeso(r)?el("span",{},[r.kg||"–",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"–");
- return recCard("pesi",r,[["Data",fmtD(r.data)||"–"],["Kg",kgEl],["Serie",r.serie||"–"]]);
+ var fl=(r._flabels||{});
+ var flds=[];
+ if(r.data!==undefined&&r.data!=="")flds.push([fl.data||"Data",fmtD(r.data)||"–"]);
+ if(r.kg!==undefined&&r.kg!==""){
+  var kgEl=isBestPeso(r)?el("span",{},[r.kg||"–",el("span",{class:"rec-badge"},"🏆 PR")]):(r.kg||"–");
+  flds.push([fl.kg||"Kg",kgEl]);
+ }
+ if(r.serie!==undefined&&r.serie!=="")flds.push([fl.serie||"Serie",r.serie||"–"]);
+ var seen={};
+ getPesiFieldsFor(r.es).forEach(function(cf){
+  if(["data","kg","serie","note"].indexOf(cf.key)>=0)return;
+  if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!==""){
+   if(!isZeroGradiField(r.es,cf.label,r[cf.key]))flds.push([cf.label,String(r[cf.key]).trim()]);
+   seen[cf.key]=1;
+  }
+ });
+ if(r._cflabels){
+  Object.keys(r._cflabels).sort().forEach(function(k){
+   if(!seen[k]&&r[k]!==undefined&&String(r[k]).trim()!==""){
+    if(!isZeroGradiField(r.es,r._cflabels[k],r[k]))flds.push([r._cflabels[k],String(r[k]).trim()]);
+   }
+  });
+ }
+ if(!flds.length)flds.push(["Data",fmtD(r.data)||"–"]);
+ return recCard("pesi",r,flds);
 }
 function rincCard(r){
  var f=[];if(r.mis)f.push(["Distanza",r.mis+" m"]);
@@ -516,15 +553,59 @@ function drawPesi(rows,box){
   g.forEach(function(r){box.append(pesoCard(r))});
  });
 }
-var LUCA_CFG_OPEN=false,LUCA_SEL_EX="";
+var LUCA_NEW_EX_OPEN=false,LUCA_ADD_FIELD_EX="",LUCA_EDIT_FIELD=null;
+var BASE_PESI_FIELDS=[
+ {key:"data",label:"Data",type:"date",req:true},
+ {key:"kg",label:"Kg",type:"number",req:true},
+ {key:"serie",label:"Serie × ripetizioni",type:"text",req:true},
+ {key:"note",label:"Note",type:"text",req:false}
+];
+function cloneFieldList(arr){
+ return (arr||[]).map(function(f){return {key:f.key,label:f.label,type:f.type||"text",req:!!f.req}});
+}
 function isLuca(){return !!(ses&&fmt(ses.n).toLowerCase()==="luca stefanachi")}
 function getLucaPesiCfg(){
  return (S.pesi_cfg||[]).slice().sort(function(a,b){return (a.ts||0)-(b.ts||0)});
 }
-function getPesiExtraFieldsFor(exName){
- var e=(exName||"").trim().toLowerCase();if(!e)return [];
+function getAllPesiExercises(){
+ var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3].slice();
+ var cfgs=getLucaPesiCfg();
+ var hiddenMap={};
+ cfgs.forEach(function(c){
+  if(c.nome&&c.hidden)hiddenMap[c.nome.trim().toLowerCase()]=true;
+ });
+ var out=base.filter(function(b){return !hiddenMap[b.trim().toLowerCase()]});
+ cfgs.forEach(function(c){
+  if(c.nome&&!c.hidden&&!out.some(function(x){return x.toLowerCase()===c.nome.trim().toLowerCase()})){
+   out.push(c.nome.trim());
+  }
+ });
+ return out;
+}
+function getPesiFieldsFor(exName){
+ var e=(exName||"").trim().toLowerCase();
+ if(!e)return cloneFieldList(BASE_PESI_FIELDS);
  var c=getLucaPesiCfg().filter(function(x){return (x.nome||"").trim().toLowerCase()===e})[0];
- return (c&&Array.isArray(c.fields))?c.fields:[];
+ if(c&&Array.isArray(c.allFields))return cloneFieldList(c.allFields);
+ var legacy=(c&&Array.isArray(c.fields))?cloneFieldList(c.fields):[];
+ return cloneFieldList(BASE_PESI_FIELDS).concat(legacy);
+}
+function getPesiExtraFieldsFor(exName){
+ return getPesiFieldsFor(exName).filter(function(f){return ["data","kg","serie","note"].indexOf(f.key)<0});
+}
+function savePesiExFields(exName,nextAllFields){
+ var cfgs=getLucaPesiCfg();
+ var curCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===exName.trim().toLowerCase()})[0];
+ var docId=curCfg?curCfg.id:("pcfg-"+uid());
+ var legacyExtra=nextAllFields.filter(function(f){return ["data","kg","serie","note"].indexOf(f.key)<0});
+ db.collection("pesi_cfg").doc(docId).set({
+  nome:curCfg?curCfg.nome:exName.trim(),
+  allFields:cloneFieldList(nextAllFields),
+  fields:cloneFieldList(legacyExtra),
+  hidden:false,
+  owner:curCfg?(curCfg.owner||me):me,
+  ts:curCfg?(curCfg.ts||Date.now()):Date.now()
+ }).catch(function(){});
 }
 function isZeroGradiField(exName,label,rawVal){
  var ex=(exName||"").trim().toLowerCase();
@@ -565,101 +646,184 @@ function pesoExLabel(r){
 function pesoExKey(r){
  return pesoExLabel(r).toLowerCase();
 }
+function fieldTypeLabel(t){
+ return t==="number"?"Numero":(t==="date"?"Data":"Testo");
+}
 function pesiCfgPage(app){
  if(!isLuca()){go("pesi");return}
  app.append(el("button",{class:"link",onclick:function(){go("pesi")}},"← Torna a Pesi"));
- var wrap=el("div",{class:"card",style:"border-color:var(--ac)"});
- wrap.append(el("div",{class:"big"},"⚙️ Esercizi e campi personalizzati"));
- wrap.append(el("div",{class:"mu",style:"margin-top:4px"},"Aggiungi nuovi esercizi o configura campi personalizzati per i pesi."));
- var cfgs=getLucaPesiCfg();
- var baseEs=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
- // Add new exercise box
- var newExInp=el("input",{type:"text",placeholder:"Es. Hip Thrust, Affondi, Box Jump…"});
- var addExBtn=el("button",{style:"margin-top:8px",onclick:function(){
-  var nmEx=newExInp.value.trim();
-  if(!nmEx){alert("Scrivi il nome dell’esercizio.");return}
-  var allNames=baseEs.concat(cfgs.map(function(c){return c.nome}));
-  if(allNames.some(function(x){return x.toLowerCase()===nmEx.toLowerCase()})){
-   alert("Questo esercizio esiste già.");return;
-  }
-  var id="pcfg-"+uid();
-  db.collection("pesi_cfg").doc(id).set({nome:nmEx,fields:[],owner:me,ts:Date.now()}).catch(function(){});
-  LUCA_SEL_EX=nmEx;newExInp.value="";toast("Esercizio aggiunto ✓");
- }},"＋ Aggiungi esercizio");
- wrap.append(el("label",{},"Nuovo esercizio per i pesi"),newExInp,addExBtn);
 
- // Select exercise to configure custom fields (can be any base exercise OR custom exercise!)
- var allExList=baseEs.concat(cfgs.map(function(c){return c.nome}).filter(function(n){return baseEs.indexOf(n)<0}));
- if(!LUCA_SEL_EX&&allExList.length)LUCA_SEL_EX=cfgs.length?cfgs[0].nome:allExList[0];
- var selEx=el("select",{});
- allExList.forEach(function(n){
-  var isCust=cfgs.some(function(c){return c.nome.toLowerCase()===n.toLowerCase()});
-  selEx.append(el("option",{value:n},n+(isCust?" ★":"")));
+ var topCard=el("div",{class:"card",style:"border-color:var(--ac)"});
+ topCard.append(el("div",{class:"big"},"⚙️ Gestione esercizi e campi pesi"));
+ topCard.append(el("div",{class:"mu",style:"margin-top:4px"},"Modifica, elimina o aggiungi campi per ogni esercizio."));
+ topCard.append(el("button",{style:"margin-top:10px",onclick:function(){LUCA_NEW_EX_OPEN=!LUCA_NEW_EX_OPEN;render()}},LUCA_NEW_EX_OPEN?"Chiudi nuovo esercizio":"＋ Nuovo esercizio"));
+
+ if(LUCA_NEW_EX_OPEN){
+  var newExInp=el("input",{type:"text",placeholder:"Es. Hip Thrust, Affondi, Box Jump…",style:"margin-top:8px"});
+  var saveExBtn=el("button",{class:"sec2",style:"margin-top:8px",onclick:function(){
+   var nmEx=newExInp.value.trim();
+   if(!nmEx){alert("Scrivi il nome dell’esercizio.");return}
+   var existing=getAllPesiExercises();
+   if(existing.some(function(x){return x.toLowerCase()===nmEx.toLowerCase()})){
+    alert("Questo esercizio esiste già.");return;
+   }
+   var cfgs=getLucaPesiCfg();
+   var oldHidden=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===nmEx.toLowerCase()})[0];
+   var docId=oldHidden?oldHidden.id:("pcfg-"+uid());
+   db.collection("pesi_cfg").doc(docId).set({
+    nome:nmEx,
+    allFields:cloneFieldList(BASE_PESI_FIELDS),
+    fields:[],
+    hidden:false,
+    owner:me,
+    ts:Date.now()
+   }).catch(function(){});
+   LUCA_NEW_EX_OPEN=false;
+   toast("Esercizio aggiunto ✓");
+  }},"Salva esercizio");
+  topCard.append(newExInp,saveExBtn);
+ }
+ app.append(topCard);
+
+ var allExList=getAllPesiExercises();
+ allExList.forEach(function(exName){
+  var fields=getPesiFieldsFor(exName);
+  var grp=el("div",{class:"card"});
+  var grpHdr=el("div",{class:"row",style:"align-items:center;margin-bottom:6px"},[
+   el("div",{class:"big",style:"font-size:17px"},exName),
+   el("button",{class:"del",onclick:function(){
+    if(!confirm("Eliminare l’esercizio “"+exName+"” dall’elenco dei pesi?"))return;
+    var cfgs=getLucaPesiCfg();
+    var curCfg=cfgs.filter(function(c){return (c.nome||"").trim().toLowerCase()===exName.trim().toLowerCase()})[0];
+    var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3];
+    var isBase=base.some(function(b){return b.toLowerCase()===exName.trim().toLowerCase()});
+    if(curCfg&&!isBase){
+     db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
+    }else{
+     var docId=curCfg?curCfg.id:("pcfg-"+uid());
+     db.collection("pesi_cfg").doc(docId).set({
+      nome:exName,
+      allFields:fields,
+      fields:curCfg?(curCfg.fields||[]):[],
+      hidden:true,
+      owner:me,
+      ts:curCfg?(curCfg.ts||Date.now()):Date.now()
+     }).catch(function(){});
+    }
+    toast("Esercizio rimosso ✓");
+   }},"Elimina esercizio")
+  ]);
+  grp.append(grpHdr);
+
+  if(!fields.length){
+   grp.append(el("div",{class:"mu",style:"margin:6px 0"},"Nessun campo configurato per questo esercizio."));
+  }else{
+   fields.forEach(function(cf,idx){
+    var isEditingThis=LUCA_EDIT_FIELD&&LUCA_EDIT_FIELD.ex===exName&&LUCA_EDIT_FIELD.idx===idx;
+    if(isEditingThis){
+     var eName=el("input",{type:"text"});eName.value=cf.label;
+     var eType=el("select",{style:"margin-top:6px"},[
+      el("option",{value:"text"},"Tipo: Testo"),
+      el("option",{value:"number"},"Tipo: Numero"),
+      el("option",{value:"date"},"Tipo: Data")
+     ]);
+     eType.value=cf.type||"text";
+     var eReq=el("select",{style:"margin-top:6px"},[
+      el("option",{value:"0"},"Facoltativo"),
+      el("option",{value:"1"},"Obbligatorio")
+     ]);
+     eReq.value=cf.req?"1":"0";
+     var editBox=el("div",{style:"padding:10px;background:var(--bg);border:1px solid var(--ac);border-radius:10px;margin-top:8px"},[
+      el("div",{class:"tag",style:"margin-bottom:4px"},"Modifica campo"),
+      eName,eType,eReq,
+      el("div",{style:"display:flex;gap:8px;margin-top:8px"},[
+       el("button",{style:"padding:10px",onclick:function(){
+        var nl=eName.value.trim();
+        if(!nl){alert("Scrivi il nome del campo.");return}
+        if(fields.some(function(x,i){return i!==idx&&x.label.toLowerCase()===nl.toLowerCase()})){
+         alert("Esiste già un campo con questo nome in "+exName+".");return;
+        }
+        var nextF=cloneFieldList(fields);
+        nextF[idx]={key:cf.key,label:nl,type:eType.value,req:eReq.value==="1"};
+        savePesiExFields(exName,nextF);
+        LUCA_EDIT_FIELD=null;
+        toast("Campo modificato ✓");
+       }},"Salva"),
+       el("button",{class:"sec2",style:"padding:10px",onclick:function(){LUCA_EDIT_FIELD=null;render()}},"Annulla")
+      ])
+     ]);
+     grp.append(editBox);
+    }else{
+     var row=el("div",{class:"row",style:"padding:8px 10px;background:var(--bg);border-radius:10px;margin-top:6px;align-items:center"},[
+      el("div",{style:"min-width:0"},[
+       el("strong",{},cf.label),
+       el("div",{class:"tag"},fieldTypeLabel(cf.type)+" · "+(cf.req?"Obbligatorio":"Facoltativo"))
+      ]),
+      el("div",{style:"display:flex;gap:6px;flex-shrink:0"},[
+       el("button",{class:"pill b",onclick:function(){
+        LUCA_EDIT_FIELD={ex:exName,idx:idx};
+        LUCA_ADD_FIELD_EX="";
+        render();
+       }},"Modifica"),
+       el("button",{class:"pill r",onclick:function(){
+        if(!confirm("Eliminare il campo “"+cf.label+"” da "+exName+"?"))return;
+        var nextF=fields.filter(function(_,i){return i!==idx});
+        savePesiExFields(exName,nextF);
+        if(LUCA_EDIT_FIELD&&LUCA_EDIT_FIELD.ex===exName)LUCA_EDIT_FIELD=null;
+        toast("Campo eliminato ✓");
+       }},"Elimina")
+      ])
+     ]);
+     grp.append(row);
+    }
+   });
+  }
+
+  // Per-exercise button to insert a new field
+  if(LUCA_ADD_FIELD_EX===exName){
+   var nName=el("input",{type:"text",placeholder:"Nome nuovo campo (es. Recupero, Inclinazione…)"});
+   var nType=el("select",{style:"margin-top:6px"},[
+    el("option",{value:"text"},"Tipo: Testo"),
+    el("option",{value:"number"},"Tipo: Numero"),
+    el("option",{value:"date"},"Tipo: Data")
+   ]);
+   var nReq=el("select",{style:"margin-top:6px"},[
+    el("option",{value:"0"},"Facoltativo"),
+    el("option",{value:"1"},"Obbligatorio")
+   ]);
+   var addBox=el("div",{style:"padding:10px;background:var(--bg);border:1px dashed var(--ac);border-radius:10px;margin-top:10px"},[
+    el("div",{class:"tag",style:"margin-bottom:4px"},"Nuovo campo per "+exName),
+    nName,nType,nReq,
+    el("div",{style:"display:flex;gap:8px;margin-top:8px"},[
+     el("button",{style:"padding:10px",onclick:function(){
+      var lbl=nName.value.trim();
+      if(!lbl){alert("Scrivi il nome del campo.");return}
+      if(fields.some(function(x){return x.label.toLowerCase()===lbl.toLowerCase()})){
+       alert("Esiste già un campo con questo nome in "+exName+".");return;
+      }
+      var nf={key:"cf_"+uid(),label:lbl,type:nType.value,req:nReq.value==="1"};
+      savePesiExFields(exName,fields.concat([nf]));
+      LUCA_ADD_FIELD_EX="";
+      toast("Campo aggiunto a "+exName+" ✓");
+     }},"Aggiungi campo"),
+     el("button",{class:"sec2",style:"padding:10px",onclick:function(){LUCA_ADD_FIELD_EX="";render()}},"Annulla")
+    ])
+   ]);
+   grp.append(addBox);
+  }else{
+   grp.append(el("button",{class:"sec2",style:"margin-top:10px;padding:10px",onclick:function(){
+    LUCA_ADD_FIELD_EX=exName;
+    LUCA_EDIT_FIELD=null;
+    render();
+   }},"＋ Nuovo campo per "+exName));
+  }
+
+  app.append(grp);
  });
- selEx.value=LUCA_SEL_EX;
- selEx.onchange=function(){LUCA_SEL_EX=selEx.value;render()};
- wrap.append(el("div",{style:"border-top:1px solid var(--bd);margin:14px 0 6px"}),el("label",{},"Aggiungi o gestisci campi per l’esercizio:"),selEx);
-
- var curCfg=cfgs.filter(function(c){return (c.nome||"").toLowerCase()===LUCA_SEL_EX.toLowerCase()})[0];
- var curFields=(curCfg&&curCfg.fields)||[];
- if(curFields.length){
-  var flBox=el("div",{style:"margin-top:8px"});
-  curFields.forEach(function(cf,idx){
-   flBox.append(el("div",{class:"row",style:"padding:6px 8px;background:var(--bg);border-radius:8px;margin-top:6px;align-items:center"},[
-    el("span",{},[el("strong",{},cf.label),el("span",{class:"tag"}," ("+(cf.type==="number"?"Numero":"Testo")+(cf.req?", obbl.":"")+")")]),
-    el("button",{class:"del",onclick:function(){
-     if(!confirm("Rimuovere il campo “"+cf.label+"” da "+LUCA_SEL_EX+"?"))return;
-     var nextF=curFields.filter(function(_,i){return i!==idx});
-     if(nextF.length===0&&baseEs.indexOf(curCfg.nome)>=0){
-      db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
-     }else{
-      db.collection("pesi_cfg").doc(curCfg.id).set({nome:curCfg.nome,fields:nextF,owner:curCfg.owner||me,ts:curCfg.ts||Date.now()}).catch(function(){});
-     }
-     toast("Campo rimosso ✓");
-    }},"Elimina")
-   ]));
-  });
-  wrap.append(flBox);
- }else{
-  wrap.append(el("div",{class:"mu",style:"margin-top:6px"},"Nessun campo extra per "+LUCA_SEL_EX+"."));
- }
-
- var fName=el("input",{type:"text",placeholder:"Nome campo (es. Recupero, Altezza cm, Lato…)"});
- var fType=el("select",{style:"margin-top:6px"},[
-  el("option",{value:"text"},"Tipo: Testo"),
-  el("option",{value:"number"},"Tipo: Numero")
- ]);
- var fReq=el("select",{style:"margin-top:6px"},[
-  el("option",{value:"0"},"Facoltativo"),
-  el("option",{value:"1"},"Obbligatorio")
- ]);
- var addFieldBtn=el("button",{class:"sec2",style:"margin-top:8px",onclick:function(){
-  var lbl=fName.value.trim();
-  if(!lbl){alert("Scrivi il nome del campo.");return}
-  if(curFields.some(function(x){return x.label.toLowerCase()===lbl.toLowerCase()})){
-   alert("Esiste già un campo con questo nome per "+LUCA_SEL_EX+".");return;
-  }
-  var nf={key:"cf_"+uid(),label:lbl,type:fType.value,req:fReq.value==="1"};
-  var nextF=curFields.concat([nf]);
-  var docId=curCfg?curCfg.id:("pcfg-"+uid());
-  db.collection("pesi_cfg").doc(docId).set({nome:curCfg?curCfg.nome:LUCA_SEL_EX,fields:nextF,owner:me,ts:curCfg?curCfg.ts:Date.now()}).catch(function(){});
-  fName.value="";toast("Campo aggiunto a "+LUCA_SEL_EX+" ✓");
- }},"＋ Aggiungi campo solo per "+LUCA_SEL_EX);
- wrap.append(el("label",{},"Nuovo campo solo per "+LUCA_SEL_EX),fName,fType,fReq,addFieldBtn);
-
- // Allow deleting custom exercise if it's not a base exercise
- if(curCfg&&baseEs.indexOf(curCfg.nome)<0){
-  wrap.append(el("div",{style:"margin-top:10px;text-align:right"},el("button",{class:"del",onclick:function(){
-   if(!confirm("Eliminare l’esercizio personalizzato “"+curCfg.nome+"”?"))return;
-   db.collection("pesi_cfg").doc(curCfg.id).delete().catch(function(){});
-   LUCA_SEL_EX="";toast("Esercizio eliminato ✓");
-  }},"Elimina esercizio “"+curCfg.nome+"”")));
- }
- app.append(wrap);
 }
 function section(app,k){
- var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={},customBox=el("div",{}),customInp={};
- inp._custom=customInp;
+ var form=el("div",{class:"card"}),inp={},cond=[],G={},lab={},pesiBox=el("div",{}),pesiMap={};
+ inp._pesiMap=pesiMap;
  var er=(EDIT&&EDIT.k===k)?S[k].filter(function(r){return r.id===EDIT.id})[0]:null;
  if(EDIT&&!er)EDIT=null;
  function fillEsOptions(){
@@ -667,37 +831,40 @@ function section(app,k){
   var prev=inp.es.value;
   inp.es.replaceChildren();
   inp.es.append(el("option",{value:""},"Scegli l’esercizio…"));
-  var base=F.pesi.f.filter(function(f){return f[0]==="es"})[0][3].slice();
-  getLucaPesiCfg().forEach(function(c){
-   if(c.nome&&!base.some(function(b){return b.toLowerCase()===c.nome.toLowerCase()}))base.push(c.nome);
-  });
-  base.forEach(function(o){inp.es.append(el("option",{value:o},o))});
+  getAllPesiExercises().forEach(function(o){inp.es.append(el("option",{value:o},o))});
   if(prev)inp.es.value=prev;
  }
- function syncCustomPesi(prefillObj){
+ function syncPesiFields(prefillObj){
   if(k!=="pesi")return;
-  customBox.replaceChildren();
-  for(var key in customInp)delete customInp[key];
-  if(!inp.es||!inp.es.value)return;
-  var extra=getPesiExtraFieldsFor(inp.es.value);
-  if(!extra.length)return;
-  extra.forEach(function(cf){
-   var ci=el("input",{type:cf.type==="number"?"number":"text",id:"f_"+cf.key});
-   if(cf.type==="number")ci.setAttribute("inputmode","decimal");
-   if(prefillObj&&prefillObj[cf.key]!==undefined)ci.value=prefillObj[cf.key];
-   customInp[cf.key]=ci;
-   customBox.append(el("label",{},cf.label+(cf.req?" *":"")),ci);
+  pesiBox.replaceChildren();
+  for(var key in pesiMap)delete pesiMap[key];
+  var flds=getPesiFieldsFor(inp.es?inp.es.value:"");
+  flds.forEach(function(cf){
+   var t=cf.type||"text";
+   var ci=el("input",{type:t,id:"f_"+cf.key});
+   if(t==="number")ci.setAttribute("inputmode","decimal");
+   if(prefillObj&&prefillObj[cf.key]!==undefined){
+    ci.value=prefillObj[cf.key];
+   }else if(t==="date"&&cf.key==="data"){
+    ci.value=new Date().toISOString().slice(0,10);
+   }
+   pesiMap[cf.key]=ci;
+   pesiBox.append(el("label",{},cf.label+(cf.req?" *":"")),ci);
   });
  }
- if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value;fillEsOptions();syncCustomPesi(er)};inp._a=sa;form.append(el("label",{},"Atleta *"),sa)}
- F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},f[0]==="es"?"Scegli l’esercizio…":"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
-  var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
-  tg.append(w);
-  if(k==="pesi"&&f[0]==="serie")form.append(customBox);
- });
+ if(admin){var sa=el("select",{});sa.append(el("option",{value:""},"Scegli l’atleta…"));people().filter(function(x){return !x.coach}).forEach(function(x){sa.append(el("option",{value:x.n},x.n))});sa.value=ATH;sa.onchange=function(){ATH=sa.value;fillEsOptions();syncPesiFields(er)};inp._a=sa;form.append(el("label",{},"Atleta *"),sa)}
  if(k==="pesi"){
+  var esSel=el("select",{id:"f_es"});
+  inp.es=esSel;
   fillEsOptions();
-  inp.es.onchange=function(){syncCustomPesi(er)};
+  esSel.onchange=function(){syncPesiFields(er)};
+  form.append(el("label",{},"Esercizio *"),esSel,pesiBox);
+  syncPesiFields(er);
+ }else{
+  F[k].f.forEach(function(f){var i;if(f[2]==="select"){i=el("select",{id:"f_"+f[0]});i.append(el("option",{value:""},"Scegli la specialità…"));(Array.isArray(f[3])?[["",f[3]]]:Object.keys(f[3]).map(function(g){return [g,f[3][g]]})).forEach(function(G){var par=G[0]?el("optgroup",{label:G[0]}):i;G[1].forEach(function(o){par.append(el("option",{value:o},o))});if(G[0])i.append(par)})}else i=el("input",{type:f[2],id:"f_"+f[0]});if(f[2]==="number")i.setAttribute("inputmode","decimal");if(f[2]==="date")i.value=new Date().toISOString().slice(0,10);inp[f[0]]=i;var lb=el("label",{},f[1]+(OPT.indexOf(f[0])<0?" *":""));lab[f[0]]=lb;var w=el("div",{},[lb,i]);if(f[4]){w.style.display="none";cond.push([w,f[4],f[0]])}
+   var tg=form;if(f[5]){if(!G[f[5]]){G[f[5]]=el("div",{style:"display:flex;gap:10px"});form.append(G[f[5]])}tg=G[f[5]];w.style.flex="1";w.style.minWidth="0"}
+   tg.append(w);
+  });
  }
  var ctl=inp.disc||inp.gara;if(ctl)ctl.onchange=function(){cond.forEach(function(c){var on=[].concat(c[1]).indexOf(ctl.value)>=0;c[0].style.display=on?"block":"none";if(!on)inp[c[2]].value=""});if(lab.passi)lab.passi.textContent=ctl.value==="Alto"?"Numero piedi 1":"Numero piedi";if(inp.ris&&inp.gara)inp.ris.placeholder=hint(inp.gara.value)||"Il tuo risultato migliore"};
  if(inp.ris&&inp.gara)inp.ris.placeholder="Il tuo risultato migliore";
@@ -706,28 +873,111 @@ function section(app,k){
   form.append(el("button",{class:"link",style:"margin-top:8px",onclick:function(){EDIT=null;render()}},"Annulla modifica"));
   form.insertBefore(el("div",{class:"tag"},"Modifica in corso"),form.firstChild);
   if(inp._a)inp._a.value=er.for||er.by||"";
-  if(k==="pesi")fillEsOptions();
-  F[k].f.forEach(function(f){if(er[f[0]]!==undefined&&inp[f[0]])inp[f[0]].value=er[f[0]]});
-  if(k==="pesi")syncCustomPesi(er);
+  if(k==="pesi"){
+   fillEsOptions();
+   if(er.es!==undefined&&inp.es)inp.es.value=er.es;
+   syncPesiFields(er);
+  }else{
+   F[k].f.forEach(function(f){if(er[f[0]]!==undefined&&inp[f[0]])inp[f[0]].value=er[f[0]]});
+  }
   var c0=inp.disc||inp.gara;if(c0&&c0.onchange)c0.onchange();
  }
  if(k==="gare")app.append(el("div",{class:"note"},"ℹ️ Inserisci solo il tuo risultato migliore per ogni specialità. Se la specialità è già presente, resta solo il risultato migliore."));
  app.append(form,el("h2",{},((k==="pesi"||k==="rincorse"||k==="gare")&&!admin)?(k==="pesi"?"I miei pesi":k==="rincorse"?"Le mie rincorse":"Le mie gare"):"Dati inseriti"));
- var FL=FIL[k]||(FIL[k]={a:"",s:"",q:"",c:-1,d:1}),C=COLS[k],tbl=el("div",{}),all=((k==="pesi"||k==="rincorse"||k==="gare")&&!admin)?S[k].filter(function(r){return keyOf(r)==="id:"+me}):S[k];
+ var FL=FIL[k]||(FIL[k]={a:"",s:"",f:"",q:"",c:-1,d:1}),C=COLS[k],tbl=el("div",{}),all=((k==="pesi"||k==="rincorse"||k==="gare")&&!admin)?S[k].filter(function(r){return keyOf(r)==="id:"+me}):S[k];
+ if(FL.f===undefined)FL.f="";
  var si=C.map(function(c){return c[2]}).indexOf("s");
  function uniq(fn){var m={};all.forEach(function(r){var v=fn(r);if(v)m[v]=1});return Object.keys(m).sort(function(x,y){return x.localeCompare(y,"it")})}
- var fa=el("select",{}),fs=el("select",{}),fq=el("input",{type:"search",placeholder:"Cerca in tutta la tabella…",style:"margin-top:8px"});
+ var fa=el("select",{}),fs=el("select",{}),fc=el("select",{}),fq=el("input",{type:"search",placeholder:k==="pesi"?"Cerca in tutti i campi (esercizio, kg, serie, data, note, campi extra…)":"Cerca in tutta la tabella…",style:"margin-top:8px"});
  fa.append(el("option",{value:""},"Tutti gli atleti"));uniq(nm).forEach(function(v){fa.append(el("option",{value:v},v))});
  fs.append(el("option",{value:""},SPL[k]));
  var sOpts={};
  uniq(C[si][1]).forEach(function(v){sOpts[v]=1});
  if(k==="pesi"){
   all.forEach(function(r){var vl=pesoExLabel(r);if(vl)sOpts[vl]=1});
-  getLucaPesiCfg().forEach(function(c){if(c.nome)sOpts[c.nome.trim()]=1});
+  getAllPesiExercises().forEach(function(n){if(n)sOpts[n.trim()]=1});
+  F.pesi.f.filter(function(f){return f[0]==="es"})[0][3].forEach(function(n){
+   var cfg=getLucaPesiCfg().filter(function(c){return (c.nome||"").trim().toLowerCase()===n.trim().toLowerCase()})[0];
+   if(!cfg||!cfg.hidden)sOpts[n.trim()]=1;
+  });
  }
  Object.keys(sOpts).sort(function(x,y){return x.localeCompare(y,"it")}).forEach(function(v){fs.append(el("option",{value:v},v))});
- if((k==="pesi"||k==="rincorse"||k==="gare")&&!admin){FL.a="";fs.style.gridColumn="1 / -1"}
- fa.value=FL.a;FL.a=fa.value;fs.value=FL.s;FL.s=fs.value;fq.value=FL.q;
+
+ var fOpts={};
+ if(k==="pesi"){
+  fc.append(el("option",{value:""},"Tutti i campi"));
+  BASE_PESI_FIELDS.forEach(function(bf){if(bf.label)fOpts[bf.label.trim()]=1});
+  getAllPesiExercises().forEach(function(exN){
+   getPesiFieldsFor(exN).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
+  });
+  getLucaPesiCfg().forEach(function(c){
+   (c.allFields||[]).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
+   (c.fields||[]).forEach(function(cf){if(cf.label)fOpts[cf.label.trim()]=1});
+  });
+  all.forEach(function(r){
+   if(r._flabels)Object.keys(r._flabels).forEach(function(key){if(r._flabels[key])fOpts[String(r._flabels[key]).trim()]=1});
+   if(r._cflabels)Object.keys(r._cflabels).forEach(function(key){if(r._cflabels[key])fOpts[String(r._cflabels[key]).trim()]=1});
+  });
+  Object.keys(fOpts).sort(function(x,y){return x.localeCompare(y,"it")}).forEach(function(v){fc.append(el("option",{value:v},v))});
+ }
+
+ if((k==="pesi"||k==="rincorse"||k==="gare")&&!admin){
+  FL.a="";
+  if(k!=="pesi")fs.style.gridColumn="1 / -1";
+ }else if(k==="pesi"){
+  fc.style.gridColumn="1 / -1";
+ }
+ fa.value=FL.a;FL.a=fa.value;fs.value=FL.s;FL.s=fs.value;fc.value=FL.f;FL.f=fc.value;fq.value=FL.q;
+
+ function pesiRowHasField(r,fieldLabel){
+  var target=(fieldLabel||"").trim().toLowerCase();
+  if(!target)return true;
+  var exFlds=getPesiFieldsFor(r.es);
+  for(var i=0;i<exFlds.length;i++){
+   if((exFlds[i].label||"").trim().toLowerCase()===target){
+    var v=r[exFlds[i].key];
+    if(v!==undefined&&String(v).trim()!=="")return true;
+    return true;
+   }
+  }
+  if(r._flabels){
+   for(var fk in r._flabels){
+    if(String(r._flabels[fk]||"").trim().toLowerCase()===target&&r[fk]!==undefined&&String(r[fk]).trim()!=="")return true;
+   }
+  }
+  if(r._cflabels){
+   for(var ck in r._cflabels){
+    if(String(r._cflabels[ck]||"").trim().toLowerCase()===target&&r[ck]!==undefined&&String(r[ck]).trim()!=="")return true;
+   }
+  }
+  return false;
+ }
+
+ function rowSearchBlob(r){
+  if(k!=="pesi"){
+   return C.map(function(c){
+    var val=c[1](r);
+    return (val&&typeof val==="object"&&val.textContent!==undefined)?val.textContent:String(val||"");
+   }).join(" ");
+  }
+  var parts=[nm(r),r.data||"",fmtD(r.data),r.es||"",pesoExLabel(r),r.kg||"",r.kg?(r.kg+" kg"):"",r.serie||"",r.note||""];
+  var fl=(r._flabels||{});
+  ["data","kg","serie","note"].forEach(function(stdKey){
+   if(fl[stdKey])parts.push(fl[stdKey]);
+  });
+  getPesiFieldsFor(r.es).forEach(function(cf){
+   if(cf.label)parts.push(cf.label);
+   if(r[cf.key]!==undefined&&String(r[cf.key]).trim()!=="")parts.push(String(r[cf.key]).trim());
+  });
+  if(r._cflabels){
+   Object.keys(r._cflabels).forEach(function(ck){
+    if(r._cflabels[ck])parts.push(r._cflabels[ck]);
+    if(r[ck]!==undefined&&String(r[ck]).trim()!=="")parts.push(String(r[ck]).trim());
+   });
+  }
+  return parts.join(" ");
+ }
+
  function draw(){
   tbl.replaceChildren();
   var rows=all.filter(function(r){
@@ -737,12 +987,17 @@ function section(app,k){
      if(pesoExLabel(r)!==FL.s&&(r.es||"").trim()!==FL.s)return false;
     }else if(C[si][1](r)!==FL.s)return false;
    }
-   if(FL.q&&C.map(function(c){return c[1](r)}).join(" ").toLowerCase().indexOf(FL.q.toLowerCase())<0)return false;
+   if(k==="pesi"&&FL.f){
+    if(!pesiRowHasField(r,FL.f))return false;
+   }
+   if(FL.q&&rowSearchBlob(r).toLowerCase().indexOf(FL.q.toLowerCase())<0)return false;
    return true;
   });
   rows.sort(function(x,y){
    if(FL.c<0)return (y.data||"").localeCompare(x.data||"")||(y.ts||0)-(x.ts||0);
    var c=C[FL.c],p=c[3]?c[3](x):c[1](x),q=c[3]?c[3](y):c[1](y);
+   if(p&&typeof p==="object"&&p.textContent!==undefined)p=p.textContent;
+   if(q&&typeof q==="object"&&q.textContent!==undefined)q=q.textContent;
    return ((typeof p==="number"&&typeof q==="number")?p-q:String(p).localeCompare(String(q),"it",{numeric:true}))*FL.d;
   });
   tbl.append(el("div",{class:"tag",style:"margin:8px 0 6px"},rows.length+" di "+all.length+" righe"));
@@ -763,9 +1018,11 @@ function section(app,k){
  }
  fa.onchange=function(){FL.a=fa.value;draw()};
  fs.onchange=function(){FL.s=fs.value;draw()};
+ fc.onchange=function(){FL.f=fc.value;draw()};
  fq.oninput=function(){FL.q=fq.value;draw()};
- app.append(el("div",{class:"card"},[el("div",{class:"tag"},"Filtri"),el("div",{class:"fgrid",style:"margin-top:6px"},((k==="pesi"||k==="rincorse"||k==="gare")&&!admin)?[fs]:[fa,fs]),fq,
-  el("button",{class:"link",style:"margin-top:6px",onclick:function(){FL.a=FL.s=FL.q="";FL.c=-1;FL.d=1;fa.value="";fs.value="";fq.value="";draw()}},"Azzera filtri")]),tbl);
+ var filterControls=((k==="pesi"||k==="rincorse"||k==="gare")&&!admin)?(k==="pesi"?[fs,fc]:[fs]):(k==="pesi"?[fa,fs,fc]:[fa,fs]);
+ app.append(el("div",{class:"card"},[el("div",{class:"tag"},"Filtri"),el("div",{class:"fgrid",style:"margin-top:6px"},filterControls),fq,
+  el("button",{class:"link",style:"margin-top:6px",onclick:function(){FL.a=FL.s=FL.f=FL.q="";FL.c=-1;FL.d=1;fa.value="";fs.value="";fc.value="";fq.value="";draw()}},"Azzera filtri")]),tbl);
  draw();
 }
 
@@ -1046,17 +1303,28 @@ function hint(g){
  return r;
 }
 function add(k,inp){
- var v={},any=false;F[k].f.forEach(function(f){v[f[0]]=inp[f[0]].value.trim();if(v[f[0]]&&f[0]!=="data")any=true});
- var mi=missing(k,inp);
- if(k==="pesi"&&inp.es&&inp.es.value&&inp._custom){
-  var extra=getPesiExtraFieldsFor(inp.es.value),cfl={};
-  extra.forEach(function(cf){
-   var elIn=inp._custom[cf.key];
+ var v={},any=false,mi=[];
+ if(k==="pesi"){
+  v.es=inp.es?inp.es.value.trim():"";
+  if(!v.es)mi.push("Esercizio");
+  var flds=getPesiFieldsFor(v.es),cfl={},flb={};
+  flds.forEach(function(cf){
+   var elIn=inp._pesiMap?inp._pesiMap[cf.key]:null;
    var val=elIn?elIn.value.trim():"";
    if(cf.req&&!val)mi.push(cf.label);
-   if(val&&!isZeroGradiField(v.es,cf.label,val)){v[cf.key]=val;cfl[cf.key]=cf.label}
+   if(["data","kg","serie","note"].indexOf(cf.key)>=0){
+    v[cf.key]=val;
+    flb[cf.key]=cf.label;
+   }else if(val&&!isZeroGradiField(v.es,cf.label,val)){
+    v[cf.key]=val;
+    cfl[cf.key]=cf.label;
+   }
   });
   if(Object.keys(cfl).length)v._cflabels=cfl;
+  if(Object.keys(flb).length)v._flabels=flb;
+ }else{
+  F[k].f.forEach(function(f){v[f[0]]=inp[f[0]].value.trim();if(v[f[0]]&&f[0]!=="data")any=true});
+  mi=missing(k,inp);
  }
  if(mi.length){alert("Compila i campi obbligatori: "+mi.join(", "));return}
  if(admin){var an=inp._a?inp._a.value:"";if(!an){alert("Scegli prima l’atleta");return}v.for=an}
@@ -1108,7 +1376,7 @@ function add(k,inp){
  if(isRec){celebrate();msg+=" (+Aura!)"}
  if(msg)toast(msg,isRec);
  logit("aggiunto",k,summary(k,v));
- F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""});if(inp._custom){for(var ck in inp._custom)inp._custom[ck].value="";if(inp.es&&inp.es.onchange)inp.es.onchange()}
+ if(k==="pesi"){if(inp.es){inp.es.value="";if(inp.es.onchange)inp.es.onchange()}}else{F[k].f.forEach(function(f){if(f[0]!=="data")inp[f[0]].value=""})}
  var ctl=inp.disc||inp.gara;if(ctl&&ctl.onchange)ctl.onchange();
 }
 function rem(k,r){
